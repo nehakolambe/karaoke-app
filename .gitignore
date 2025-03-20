@@ -1,2 +1,6 @@
 .idea
 *_env
+music_splitter/temp_input/
+*pretrained_models
+music_splitter/output
+.DS_STORE
