@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Song Search</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <!-- jQuery -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <!-- Typeahead.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-3-typeahead/4.0.2/bootstrap3-typeahead.min.js"></script>
+    <style>
+        /* Ensure the lyrics text maintains formatting */
+        #lyrics {
+            white-space: pre-wrap;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body class="container mt-5">
+    <h2 class="text-center mb-4">Search for Songs</h2>
+    <div class="form-group">
+        <input type="text" id="searchBox" class="form-control" placeholder="Type a song name..." autocomplete="off">
+        <!-- Lyrics will be displayed here -->
+        <div id="lyrics" class="form-text text-muted"></div>
+    </div>
+
+    <script>
+        $(document).ready(function(){
+            $('#searchBox').typeahead({
+                source: function(query, process){
+                    return $.get('/search', { q: query }, function(data){
+                        return process(data);
+                    });
+                },
+                displayText: function(item) {
+                    return item.title;
+                },
+                afterSelect: function(item){
+                    // Fetch and display lyrics for the selected song
+                    $.get('/lyrics', { url: item.url }, function(data){
+                        $('#lyrics').html(data.lyrics);
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
