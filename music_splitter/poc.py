@@ -26,5 +26,5 @@ def split_and_save_instrumental(input_path: str, output_dir: str) -> None:
     print(f"Instrumental saved at: {output_path}")
 
 if __name__ == "__main__":
-    split_and_save_instrumental('/Users/pratikbhirud/Library/CloudStorage/OneDrive-UCB-O365/CU Boulder/Sem2/Big Data/karaoke-app/music_splitter/temp_input/Luka Chuppi Duniyaa Full Video Song  Kartik Aaryan Kriti Sanon  Akhil  Dhvani B.mp3',
+    split_and_save_instrumental('<Enter_input_path_here>',
                                 'output')
