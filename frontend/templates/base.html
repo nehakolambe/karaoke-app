@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>{% block title %}VoxOff{% endblock %}</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="../static/css/style_main.css" />
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light px-3">
+        <a class="navbar-brand" href="/">VoxOff</a>
+    
+        <!-- Centered Search Bar -->
+        <div class="mx-auto w-50 position-relative">
+            <form class="w-100">
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    </div>
+                    <input type="text" id="search-box" class="form-control" placeholder="Search for a song..."
+                        autocomplete="off">
+                </div>
+                <div id="suggestion-box" class="dropdown-menu w-100"
+                    style="display: none; max-height: 300px; overflow-y: auto;"></div>
+            </form>
+        </div>
+    
+        <div class="ml-auto d-flex align-items-center gap-3">
+            <!-- Dark/Light Mode Toggle -->
+            <i id="theme-toggle" class="bi bi-moon-fill" title="Toggle theme" style="cursor: pointer; font-size: 1.4rem;"></i>
+    
+            <!-- Profile Dropdown -->
+            <div class="dropdown ml-3">
+                <a href="#" class="d-flex align-items-center text-dark text-decoration-none dropdown-toggle"
+                    id="dropdownUser" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    <i class="fas fa-user-circle fa-2x"></i>
+                </a>
+                <div class="dropdown-menu dropdown-menu-right" aria-labelledby="dropdownUser">
+                    <span class="dropdown-item-text">Hi, {{ name or 'Guest' }}</span>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item" href="/profile">Profile</a>
+                    <a class="dropdown-item" href="/history">History</a>
+                    <a class="dropdown-item text-danger" href="/logout">Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    
+
+
+    <div id="page-wrapper">{% block content %}{% endblock %}</div>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../static/js/script_main.js"></script>
+</body>
+
+</html>

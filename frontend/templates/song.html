@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}VoxOff{% endblock %}
+{% block content %}
+
+<div class="container-fluid mt-4">
+    <div class="row">
+        <!-- Left: 70% Lyrics Player -->
+        <div class="col-lg-8 col-md-7 col-sm-12">
+            <div id="player-container">
+                <audio id="audio" src="{{ url_for('static', filename='song1.wav') }}"></audio>
+
+                <div id="lyrics-box">
+                    <div id="lyrics-container" data-json="{{ url_for('static', filename=lyrics_json) }}"></div>
+                    <div id="controls">
+                        <button id="restart" class="btn btn-outline-secondary" title="Replay">
+                            <i class="bi bi-arrow-counterclockwise"></i>
+                        </button>
+                        <button id="playpause" class="btn btn-outline-primary" title="Play/Pause">
+                            <i class="bi bi-play-fill"></i>
+                        </button>
+                        <input id="seekbar" type="range" value="0" min="0" step="0.01">
+                        <button id="fullscreen" class="btn btn-outline-secondary" title="Fullscreen Lyrics">
+                            <i class="bi bi-arrows-fullscreen"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Song Title & Info -->
+                <div id="song-info" class="mt-3">
+                    <h4>{{ song_title }}</h4>
+                    <p class="text-muted">by {{ song_artist }}</p>
+                    {% if genius_url %}
+                    <a href="{{ genius_url }}" target="_blank" rel="noopener">View on Genius →</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: 30% Similar Songs -->
+        <div class="col-lg-4 col-md-5 col-sm-12">
+            {% if similar_songs %}
+            <h5 class="mb-3">Similar Songs</h5>
+            <div id="similar-songs">
+                {% for s in similar_songs %}
+                <div class="card mb-3">
+                    <img src="{{ s.genius_image or 'https://via.placeholder.com/150' }}" class="card-img-top" alt="Album Art">
+                    <div class="card-body p-2">
+                        <h6 class="card-title mb-1">{{ s.name }}</h6>
+                        <p class="card-text text-muted small mb-2">{{ s.artist.name }}</p>
+                        <a href="{{ url_for('song_page', song_id=0, title=s.name, artist=s.artist.name) }}"
+                        class="btn btn-sm btn-outline-primary w-100">
+                            Play Song
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
