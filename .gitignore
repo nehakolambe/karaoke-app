@@ -1,10 +1,10 @@
 .idea
-*env
+*_env
 .DS_STORE
 downloads/
 
 music_splitter/temp_input/
-*pretrained_models
+music_splitter/pretrained_models/
 music_splitter/output
 
 *.pyc

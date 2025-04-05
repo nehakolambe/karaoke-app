@@ -1,6 +1,7 @@
 from google.cloud import storage
 from constants import GCS_BUCKET_NAME
 
+
 def upload_file_to_gcs(gcs_url: str, local_path: str):
     """
     Uploads a local file to the GCS location specified by a gs:// URL.
