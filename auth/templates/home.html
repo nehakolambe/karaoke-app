@@ -5,34 +5,67 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Karaoke App</title>
     <style>
+        /* Reset & Base Styling */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        /* Background image */
         body {
-            font-family: Arial, sans-serif;
+            background: url('/static/bg.jpg') no-repeat center center fixed;
+            background-size: cover;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Glass effect container */
+        .container {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            padding: 40px 60px;
             text-align: center;
-            margin-top: 100px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(12px);
+            color: #fff;
         }
-        .welcome-message {
-            font-size: 24px;
+
+        .container h1 {
+            font-size: 36px;
             margin-bottom: 20px;
+            letter-spacing: 1px;
         }
+
         .login-btn {
             font-size: 18px;
-            padding: 10px 20px;
+            padding: 12px 28px;
             background-color: #4285F4;
             color: white;
             border: none;
             cursor: pointer;
-            border-radius: 5px;
+            border-radius: 30px;
+            transition: background-color 0.3s ease, transform 0.2s ease;
         }
+
         .login-btn:hover {
             background-color: #357ae8;
+            transform: translateY(-2px);
+        }
+
+        .login-btn:active {
+            transform: scale(0.98);
         }
     </style>
 </head>
 <body>
-    <div class="welcome-message">
+    <div class="container">
         <h1>Welcome to the Karaoke App!</h1>
-    </div>
-    <div>
         <a href="/login">
             <button class="login-btn">Login with Google</button>
         </a>
