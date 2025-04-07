@@ -1,7 +1,5 @@
 from google.cloud import storage
-
-GCS_BUCKET_NAME = 'bda-media-bucket'
-
+from constants import GCS_BUCKET_NAME
 
 def upload_file_to_gcs(gcs_url: str, local_path: str):
     """
