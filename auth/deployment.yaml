@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: karaoke-app-deployment
+  labels:
+    app: karaoke-app
+spec:
+  replicas: 1  # Number of pods to run
+  selector:
+    matchLabels:
+      app: karaoke-app
+  template:
+    metadata:
+      labels:
+        app: karaoke-app
+    spec:
+      containers:
+        - name: karaoke-app
+          image: <your-docker-image>  # Replace with your docker image (e.g., karaoke-app:latest)
+          ports:
+            - containerPort: 8000
+          env:
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth-secrets
+                  key: GOOGLE_CLIENT_ID
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth-secrets
+                  key: GOOGLE_CLIENT_SECRET
+            - name: SECRET_KEY
+              value: "random_secret_key"  # Or use a secret manager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: karaoke-app-service
+spec:
+  selector:
+    app: karaoke-app
+  ports:
+    - protocol: TCP
+      port: 80  # Exposing port 80 for external access
+      targetPort: 8000  # Forwarding to the FastAPI app's port
+  type: LoadBalancer  # Use LoadBalancer if you want external access, otherwise use ClusterIP for internal access
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: google-oauth-secrets
+type: Opaque
+data:
+  GOOGLE_CLIENT_ID: <your-google-client-id-in-base64>
+  GOOGLE_CLIENT_SECRET: <your-google-client-secret-in-base64>
