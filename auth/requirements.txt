@@ -1,10 +1,22 @@
+# FastAPI and ASGI server
 fastapi==0.95.1
+uvicorn==0.22.0
+
+# OAuth via Google
 authlib==1.0.0
 starlette==0.27.0
-uvicorn==0.22.0
-Flask
-requests
-requests-mock
-pytest
-flask-testing
 
+# HTML templating and static files
+jinja2>=3.0
+aiofiles>=0.8.0  # Required for serving static files
+
+# Firebase Admin SDK for Firestore
+firebase-admin==6.2.0
+
+# HTTP requests
+requests==2.31.0
+
+# Development & testing (optional but useful)
+pytest==7.4.2
+requests-mock==1.11.0
+flask-testing==0.8.1
