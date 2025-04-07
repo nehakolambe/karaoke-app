@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download Status</title>
+</head>
+<body>
+    <h1>Download Completed!</h1>
+    <p>Song Name: {{ song_name }}</p>
+    <p>Download Path: <a href="{{ url_for('static', filename=download_path) }}" download>Click here to download</a></p>
+</body>
+</html>
