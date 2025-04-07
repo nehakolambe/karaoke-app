@@ -6,16 +6,19 @@ from starlette.templating import Jinja2Templates
 from datetime import datetime
 import os
 from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Firestore setup
 from google.cloud import firestore
 
-# ---------- 🔐 CONFIGURATION ----------
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "bb")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "cc")
-SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-key")
+# ---------- CONFIGURATION ----------
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "ss")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "ss")
+SECRET_KEY = os.getenv("SECRET_KEY", "ss")
 
-# ---------- 🏗️ FASTAPI SETUP ----------
+# ---------- FASTAPI SETUP ----------
 app = FastAPI()
 
 # Add static files and templates directories
@@ -24,50 +27,64 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="templates")  # Set the directory for templates
 
-# ---------- 🌐 OAUTH SETUP ----------
+# ---------- FIRESTORE CLIENT ----------
+db = firestore.Client(project="music-separation-assignment")
+
+# ---------- OAUTH CONFIG ----------
 oauth = OAuth()
 oauth.register(
     name="google",
     client_id=GOOGLE_CLIENT_ID,
     client_secret=GOOGLE_CLIENT_SECRET,
-    authorize_url="https://accounts.google.com/o/oauth2/auth",
-    authorize_params={"scope": "openid email"},
-    access_token_url="https://oauth2.googleapis.com/token",
-    client_kwargs={"scope": "openid email"},
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    authorize_params={"access_type": "offline", "prompt": "consent"},
+    client_kwargs={"scope": "openid email profile"},
 )
 
-# ---------- 🔥 FIRESTORE CLIENT ----------
-db = firestore.Client(project="music-separation-assignment")
-
-# ---------- 🏠 HOME ROUTE ----------
+# ---------- HOME ROUTE ----------
 @app.get("/")
 async def home(request: Request):
     print("[INFO] Home page accessed")
     return templates.TemplateResponse("home.html", {"request": request})
 
-# ---------- 🔑 LOGIN ROUTE ----------
+# ---------- LOGIN ----------
 @app.get("/login")
 async def login(request: Request):
-    redirect_uri = "https://srurora.github.io/srushti/"
+    redirect_uri = request.url_for("auth_callback")
     print(f"[INFO] Initiating login. Redirect URI: {redirect_uri}")
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
-# ---------- 🎯 CALLBACK ROUTE ----------
 @app.get("/auth/callback")
 async def auth_callback(request: Request):
     print("[INFO] OAuth callback triggered")
 
     token = await oauth.google.authorize_access_token(request)
-    print("[INFO] Access token received")
+    print("[INFO] Access token received:", token)
 
-    user_info = await oauth.google.parse_id_token(request, token)
-    print(f"[INFO] User info parsed: {user_info}")
+    user_info = None
+    if "id_token" in token:
+        try:
+            user_info = await oauth.google.parse_id_token(request, token)
+            print("[INFO] Parsed ID token successfully")
+        except Exception as e:
+            print(f"[WARNING] parse_id_token failed: {e}")
+    else:
+        print("[WARNING] No id_token found in token")
 
     if not user_info:
-        print("[ERROR] Authentication failed")
+        try:
+            # Explicit URL to avoid protocol error
+            resp = await oauth.google.get("https://openidconnect.googleapis.com/v1/userinfo", token=token)
+            user_info = resp.json()
+            print("[INFO] Userinfo fetched via fallback:", user_info)
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch user info: {e}")
+            return {"error": "Authentication failed"}
+
+    if not user_info:
         return {"error": "Authentication failed"}
 
-    user_email = user_info["email"]
+    user_email = user_info.get("email")
     user_name = user_info.get("name", "Unknown")
     user_picture = user_info.get("picture", "")
 
@@ -87,19 +104,23 @@ async def auth_callback(request: Request):
         })
     else:
         print("[INFO] Existing user. Updating name.")
-        user_doc.update({
-            "name": user_name
-        })
+        user_doc.update({"name": user_name})
 
     request.session["user"] = {"email": user_email, "name": user_name}
     print("[INFO] Session updated")
 
-    print("[INFO] Redirecting to frontend app")
-    return RedirectResponse(url="http://localhost:8000/frontend/")
+    return RedirectResponse(url="http://127.0.0.1:5001/")
 
-# ---------- 🚪 LOGOUT ROUTE ----------
+
+# ---------- LOGOUT ----------
 @app.get("/logout")
 async def logout(request: Request):
     print(f"[INFO] User logged out: {request.session.get('user', {}).get('email', 'Unknown')}")
     request.session.clear()
-    return RedirectResponse(url="/")
+    return RedirectResponse(url="http://127.0.0.1:5001/")
+
+# ---------- FIRESTORE TEST ----------
+@app.get("/firestore-test")
+async def firestore_test():
+    db.collection("test").document("check").set({"msg": "Hello from FastAPI!"})
+    return {"status": "Success"}
