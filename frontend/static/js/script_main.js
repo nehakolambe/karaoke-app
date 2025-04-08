@@ -78,112 +78,106 @@ document.addEventListener('DOMContentLoaded', function () {
 // Lyrics Interface - 2nd Page
 
 const audio = document.getElementById('audio');
-    const playBtn = document.getElementById('playpause');
-    const seekbar = document.getElementById('seekbar');
-    const restartBtn = document.getElementById('restart');
-    const fullscreenBtn = document.getElementById('fullscreen');
-    const lyricsDiv = document.getElementById('lyrics-container');
-    const lyricsBox = document.getElementById('lyrics-box');
+const playBtn = document.getElementById('playpause');
+const seekbar = document.getElementById('seekbar');
+const restartBtn = document.getElementById('restart');
+const fullscreenBtn = document.getElementById('fullscreen');
+const lyricsDiv = document.getElementById('lyrics-container');
+const lyricsBox = document.getElementById('lyrics-box');
+const lyricsUrl = lyricsDiv.dataset.json;
 
-    let lyrics = [];
-    let currentWordIndex = 0;
+let lyrics = [];
+let currentWordIndex = 0;
 
-    fetch('/static/lyrics1.json')
-        .then(res => res.json())
-        .then(data => {
-            lyrics = data;
-            renderLyrics();
-        });
+fetch(lyricsUrl)
+    .then(res => res.json())
+    .then(data => {
+        console.log("Fetched lyrics data:", data);
+        lyrics = data;
+        renderLyrics();
+    })
+    .catch(err => console.error("Fetch error:", err));
 
-        function toProperCase(word) {
-            if (!word) return '';
-            word = word.toLowerCase();
-            if (["i", "im", "ive", "id", "ill"].includes(word)) {
-                return word.toUpperCase();
-            }
-            return word.charAt(0).toUpperCase() + word.slice(1);
-        }
-        
-        function renderLyrics() {
-            lyricsDiv.innerHTML = '';
-            let line = document.createElement('div');
-        
-            for (let i = 0; i < lyrics.length; i++) {
-                const wordObj = lyrics[i];
-                const span = document.createElement('span');
-                span.textContent = toProperCase(wordObj.word) + ' ';
-                span.id = `word-${i}`;
-                line.appendChild(span);
-        
-                const nextWord = lyrics[i + 1];
-                const gap = nextWord ? nextWord.start - wordObj.end : 0;
-        
-                // If gap between words is large, break line
-                if (gap > 1.0) {
-                    lyricsDiv.appendChild(line);
-                    line = document.createElement('div');
-                }
-            }
-        
-            // Append the last line if any
-            if (line.childNodes.length > 0) {
-                lyricsDiv.appendChild(line);
-            }
-        }        
+function renderLyrics() {
+    lyricsDiv.innerHTML = '';
 
-    function highlightWord(index) {
-        lyrics.forEach((_, i) => {
-            const word = document.getElementById(`word-${i}`);
-            word.classList.toggle('highlight', i === index);
-        });
-
-        // Scroll the current word into view smoothly if it exists
-        const activeWord = document.getElementById(`word-${index}`);
-        if (activeWord) {
-            activeWord.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
+    if (!lyrics || lyrics.length === 0) {
+        console.warn("No lyrics to render");
+        return;
     }
 
-    audio.ontimeupdate = () => {
-        seekbar.value = audio.currentTime;
-        for (let i = 0; i < lyrics.length; i++) {
-            if (audio.currentTime >= lyrics[i].start && audio.currentTime <= lyrics[i].end) {
-                highlightWord(i);
-                currentWordIndex = i;
-                break;
-            }
+    const lines = {};
+    lyrics.forEach((word, index) => {
+        const lineNumber = word.line ?? 0;
+        if (!lines[lineNumber]) lines[lineNumber] = [];
+        lines[lineNumber].push({ ...word, index });
+    });
+
+    Object.values(lines).forEach(lineWords => {
+        const div = document.createElement('div');
+        lineWords.forEach(({ word, index }) => {
+            const span = document.createElement('span');
+            span.textContent = word + ' ';
+            span.id = `word-${index}`;
+            div.appendChild(span);
+        });
+        lyricsDiv.appendChild(div);
+    });
+}
+
+function highlightWord(index) {
+    lyrics.forEach((_, i) => {
+        const word = document.getElementById(`word-${i}`);
+        word.classList.toggle('highlight', i === index);
+    });
+
+    // Scroll the current word into view smoothly if it exists
+    const activeWord = document.getElementById(`word-${index}`);
+    if (activeWord) {
+        activeWord.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+audio.ontimeupdate = () => {
+    seekbar.value = audio.currentTime;
+    for (let i = 0; i < lyrics.length; i++) {
+        if (audio.currentTime >= lyrics[i].start && audio.currentTime <= lyrics[i].end) {
+            highlightWord(i);
+            currentWordIndex = i;
+            break;
         }
-    };
+    }
+};
 
-    audio.onloadedmetadata = () => {
-        seekbar.max = audio.duration;
-    };
+audio.onloadedmetadata = () => {
+    seekbar.max = audio.duration;
+};
 
-    seekbar.oninput = () => {
-        audio.currentTime = seekbar.value;
-    };
+seekbar.oninput = () => {
+    audio.currentTime = seekbar.value;
+};
 
-    playBtn.onclick = () => {
-        if (audio.paused) {
-            audio.play();
-            playBtn.innerHTML = '<i class="bi bi-pause-fill"></i>';
-        } else {
-            audio.pause();
-            playBtn.innerHTML = '<i class="bi bi-play-fill"></i>';
-        }
-    };
+playBtn.onclick = () => {
+    if (audio.paused) {
+        audio.play();
+        playBtn.innerHTML = '<i class="bi bi-pause-fill"></i>';
+    } else {
+        audio.pause();
+        playBtn.innerHTML = '<i class="bi bi-play-fill"></i>';
+    }
+};
 
-    restartBtn.onclick = () => {
-        audio.currentTime = 0;
-        highlightWord(-1);
-    };
+restartBtn.onclick = () => {
+    audio.currentTime = 0;
+    highlightWord(-1);
+};
 
-    fullscreenBtn.onclick = () => {
-        if (!document.fullscreenElement) {
-            lyricsBox.requestFullscreen();
-            lyricsBox.classList.add("fullscreen-mode");
-        } else {
-            document.exitFullscreen();
-            lyricsBox.classList.remove("fullscreen-mode");
-        }
-    };
+fullscreenBtn.onclick = () => {
+    if (!document.fullscreenElement) {
+        lyricsBox.requestFullscreen();
+        lyricsBox.classList.add("fullscreen-mode");
+    } else {
+        document.exitFullscreen();
+        lyricsBox.classList.remove("fullscreen-mode");
+    }
+};

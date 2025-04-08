@@ -1,16 +1,39 @@
 import requests
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, Response
 import re
+import datetime
+from google.cloud import storage
+from google.oauth2 import service_account
+from dotenv import load_dotenv
+import os
 
 app = Flask(__name__)
+load_dotenv()
 
-GENIUS_API_KEY = "<enter_genius_api_key>"
-LASTFM_API_KEY = "<enter_lastfm_api_key>"
-GENIUS_SEARCH_URL = "https://api.genius.com/search"
+# ---------- CONFIGURATION ----------
+LASTFM_API_KEY = os.getenv("LASTFM_API_KEY")
+GENIUS_API_KEY = os.getenv("GENIUS_API_KEY")
+GENIUS_SEARCH_URL = os.getenv("GENIUS_SEARCH_URL")
+SERVICE_ACCOUNT_PATH = os.getenv("SERVICE_ACCOUNT_PATH")
+MEDIA_BUCKET = os.getenv("MEDIA_BUCKET")
 
 @app.context_processor
 def inject_user():
     return dict(name="John") # Replace it with person name call
+
+def generate_signed_url(bucket_name, blob_name, expiration_minutes=10):
+    credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_PATH)
+    storage_client = storage.Client(credentials=credentials)
+
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+
+    url = blob.generate_signed_url(
+        version="v4",
+        expiration=datetime.timedelta(minutes=expiration_minutes),
+        method="GET",
+    )
+    return url
 
 @app.route('/')
 def home():
@@ -112,6 +135,17 @@ def get_similar_songs_from_lastfm(artist, track):
 
     return similar_tracks
 
+@app.route('/get_lyrics/<path:song_path>')
+def get_lyrics(song_path):
+    # Generate signed URL
+    signed_url = generate_signed_url(MEDIA_BUCKET, f"songs/{song_path}", expiration_minutes=10)
+
+    # Fetch content server-side
+    res = requests.get(signed_url)
+    if res.status_code != 200:
+        return "Failed to fetch lyrics", 500
+
+    return Response(res.content, content_type='application/json')
 
 @app.route('/song/<song_id>')
 def song_page(song_id):
@@ -130,10 +164,15 @@ def song_page(song_id):
     # Fetch similar songs
     similar_songs = get_similar_songs_from_lastfm(artist, track)
 
+    audio_blob = "songs/test123/instrumental.wav"
+    song_url = generate_signed_url(MEDIA_BUCKET, audio_blob)
+
     return render_template("song.html",
                         song_title=raw_title,
                         song_artist=raw_artist,
                         song_id=song_id,
+                        song_url=song_url,
+                        lyrics_url="/get_lyrics/test123/lyrics_words.json",
                         similar_songs=similar_songs)
 
 if __name__ == '__main__':

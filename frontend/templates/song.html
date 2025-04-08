@@ -7,10 +7,9 @@
         <!-- Left: 70% Lyrics Player -->
         <div class="col-lg-8 col-md-7 col-sm-12">
             <div id="player-container">
-                <audio id="audio" src="{{ url_for('static', filename='song1.wav') }}"></audio>
-
+                <audio id="audio" src="{{ song_url }}"></audio> 
                 <div id="lyrics-box">
-                    <div id="lyrics-container" data-json="{{ url_for('static', filename=lyrics_json) }}"></div>
+                    <div id="lyrics-container" data-json="{{ lyrics_url }}"></div>
                     <div id="controls">
                         <button id="restart" class="btn btn-outline-secondary" title="Replay">
                             <i class="bi bi-arrow-counterclockwise"></i>
