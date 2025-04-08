@@ -1,0 +1,311 @@
+------------------ whisper line ------------------------
+
+fetch(lyricsUrl)
+    .then(res => res.json())
+    .then(data => {
+        lyrics = data;
+        renderLyricsLines();
+    })
+    .catch(err => console.error("Failed to load lyrics:", err));
+
+function renderLyricsLines() {
+    lyricsDiv.innerHTML = '';
+
+    lyrics.forEach((lineObj, index) => {
+        const div = document.createElement("div");
+        div.textContent = lineObj.line;  // changed from lineObj.line
+        div.id = `line-${index}`;
+        lyricsDiv.appendChild(div);
+    });
+}
+
+function highlightLine(index) {
+    document.querySelectorAll(".highlight").forEach(el => el.classList.remove("highlight"));
+
+    const lineEl = document.getElementById(`line-${index}`);
+    if (lineEl) {
+        lineEl.classList.add("highlight");
+        lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+audio.ontimeupdate = () => {
+    const t = audio.currentTime;
+    seekbar.value = t;
+
+    for (let i = 0; i < lyrics.length; i++) {
+        if (t >= lyrics[i].start && t <= lyrics[i].end) {
+            if (currentLineIndex !== i) {
+                currentLineIndex = i;
+                highlightLine(i);
+            }
+            break;
+        }
+    }
+};
+   
+
+------------------ forcealign line ------------------------
+let currentLineIndex = -1;
+
+// fetch(lyricsUrl)
+//     .then(res => res.json())
+//     .then(data => {
+//         lyrics = data;
+//         renderLyricsLines();
+//     })
+//     .catch(err => console.error("Failed to load lyrics:", err));
+
+//     function renderLyricsLines() {
+//         lyricsDiv.innerHTML = '';
+    
+//         lyrics.forEach((lineObj, index) => {
+//             const div = document.createElement("div");
+//             div.textContent = lineObj.line;
+//             div.id = `line-${index}`;
+//             lyricsDiv.appendChild(div);
+//         });
+//     }
+
+//     function highlightLine(index) {
+//         // Remove existing highlight
+//         document.querySelectorAll(".highlight").forEach(el => el.classList.remove("highlight"));
+    
+//         const lineEl = document.getElementById(`line-${index}`);
+//         if (lineEl) {
+//             lineEl.classList.add("highlight");
+//             lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+//         }
+//     }
+    
+//     audio.ontimeupdate = () => {
+//         const t = audio.currentTime;
+//         seekbar.value = t;
+    
+//         for (let i = 0; i < lyrics.length; i++) {
+//             if (t >= lyrics[i].start && t <= lyrics[i].end) {
+//                 if (currentLineIndex !== i) {
+//                     currentLineIndex = i;
+//                     highlightLine(i);
+//                 }
+//                 break;
+//             }
+//         }
+//     };
+
+
+------------------ whisper line own lyrics ------------------------
+import whisper
+import json
+
+# Load Whisper model (you can use 'base', 'small', 'medium', or 'large')
+model = whisper.load_model("small")
+
+# Transcribe the song
+result = model.transcribe("static/song1.wav")
+
+# Save segments to JSON
+with open("lyrics_whisper_bohe.json", "w") as f:
+    json.dump(result["segments"], f, indent=2)
+
+# Optional: print first few lines
+for seg in result["segments"][:5]:
+    print(f"[{seg['start']:.2f} - {seg['end']:.2f}]: {seg['text']}")
+
+------------------ whisper line genius lyrics ------------------------
+import whisper
+import json
+from difflib import SequenceMatcher
+
+# 1. Load Whisper model
+model = whisper.load_model("small")
+
+# 2. Transcribe the song
+result = model.transcribe("static/song1.wav")
+segments = result["segments"]
+
+# # 3. Save raw Whisper output (optional)
+# with open("lyrics_whisper_genius.json", "w") as f:
+#     json.dump(segments, f, indent=2)
+
+# 4. Load Genius lyrics from lyrics.txt
+with open("lyrics1.txt", "r", encoding="utf-8") as f:
+    genius_lyrics = [line.strip() for line in f if line.strip()]
+
+# 5. Fuzzy match each line to Whisper output
+def find_best_match(line, segments):
+    best = None
+    best_score = 0
+    for seg in segments:
+        score = SequenceMatcher(None, line.lower(), seg['text'].lower()).ratio()
+        if score > best_score:
+            best = seg
+            best_score = score
+    return best, best_score
+
+aligned_lyrics = []
+for line in genius_lyrics:
+    match, score = find_best_match(line, segments)
+    if match and score > 0.6:  # threshold for alignment
+        aligned_lyrics.append({
+            "line": line,
+            "start": round(match["start"], 2),
+            "end": round(match["end"], 2),
+            "score": round(score, 2)
+        })
+    else:
+        aligned_lyrics.append({
+            "line": line,
+            "start": None,
+            "end": None,
+            "score": round(score, 2)
+        })
+
+# 6. Save the aligned lyrics
+with open("lyrics_whisper_genius.json", "w", encoding="utf-8") as f:
+    json.dump(aligned_lyrics, f, indent=2)
+
+# 7. Preview first few aligned lines
+print("✅ Alignment complete. Sample output:")
+for l in aligned_lyrics[:5]:
+    print(f"[{l['start']} - {l['end']}] ({l['score']}) {l['line']}")
+
+
+from forcealign import ForceAlign
+import json
+
+# Load audio and lyrics
+audio_path = 'static/song.wav'
+with open('lyrics.txt', 'r') as f:
+    transcript = f.read()
+
+# Split into lines and tokens for reference
+lines = [line.strip().split() for line in transcript.strip().split('\n')]
+flat_transcript_words = [w for line in lines for w in line]
+
+# Align entire flat transcript
+align = ForceAlign(audio_file=audio_path, transcript=' '.join(flat_transcript_words))
+words = align.inference()
+
+# Now map back aligned words to their line number
+aligned_words = []
+w_idx = 0
+
+for line_num, line in enumerate(lines):
+    for _ in line:
+        if w_idx >= len(words):
+            break
+        aligned_word = words[w_idx]
+        aligned_words.append({
+            "word": aligned_word.word,
+            "start": aligned_word.time_start,
+            "end": aligned_word.time_end,
+            "line": line_num
+        })
+        w_idx += 1
+
+with open("lyrics_line.json", "w") as f:
+    json.dump(aligned_words, f, indent=2)
+
+
+------------------ forcealign line ------------------------
+from forcealign import ForceAlign
+import json
+
+# Input paths
+audio_path = 'static/song.wav'
+lyrics_path = 'lyrics.txt'
+output_json = 'lyrics_line.json'
+
+# Load the original formatted lyrics
+with open(lyrics_path, 'r') as f:
+    lines = [line.strip().split() for line in f.readlines()]
+
+# Flatten for alignment
+flat_transcript_words = [w for line in lines for w in line]
+
+# Create ForceAlign instance
+align = ForceAlign(audio_file=audio_path, transcript=' '.join(flat_transcript_words))
+
+# Run alignment
+words = align.inference()
+
+# Build aligned output with original words and line numbers
+aligned_words = []
+w_idx = 0
+
+for line_num, line in enumerate(lines):
+    for word in line:
+        if w_idx >= len(words):
+            break
+        aligned_word = words[w_idx]
+        aligned_words.append({
+            "word": word,
+            "start": aligned_word.time_start,
+            "end": aligned_word.time_end,
+            "line": line_num
+        })
+        w_idx += 1
+
+# Save result
+with open(output_json, "w") as f:
+    json.dump(aligned_words, f, indent=2)
+
+
+from forcealign import ForceAlign
+import json
+
+# Input paths
+audio_path = 'static/song1.wav'
+lyrics_path = 'lyrics1.txt'
+output_json = 'lyrics_lines_bohe.json'
+
+# Load the original formatted lyrics
+with open(lyrics_path, 'r') as f:
+    raw_lines = [line.strip() for line in f.readlines()]
+
+# Tokenize lines
+lines = [line.split() for line in raw_lines]
+flat_transcript_words = [w for line in lines for w in line]
+
+# Align using flat transcript
+align = ForceAlign(audio_file=audio_path, transcript=' '.join(flat_transcript_words))
+aligned_words = align.inference()
+
+# Now rebuild full lines with timing
+line_level_lyrics = []
+w_idx = 0
+
+for line_num, original_words in enumerate(lines):
+    if not original_words:
+        continue  # Skip empty lines
+
+    start = None
+    end = None
+    words_in_line = []
+
+    for word in original_words:
+        if w_idx >= len(aligned_words):
+            break
+
+        aligned_word = aligned_words[w_idx]
+        words_in_line.append(word)
+        if start is None:
+            start = aligned_word.time_start
+        end = aligned_word.time_end
+        w_idx += 1
+
+    line_level_lyrics.append({
+        "line": " ".join(words_in_line),  # original formatting
+        "start": start,
+        "end": end
+    })
+
+# Save result
+with open(output_json, "w") as f:
+    json.dump(line_level_lyrics, f, indent=2)
+
+# Optional preview
+print(f"Saved {len(line_level_lyrics)} lines to {output_json}")
+for line in line_level_lyrics[:3]:
+    print(f"[{line['start']:.2f}-{line['end']:.2f}] {line['line']}")
