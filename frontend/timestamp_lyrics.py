@@ -1,26 +1,41 @@
 from forcealign import ForceAlign
 import json
 
-# Provide path to audio file and corresponding transcript
-audio_path = 'static/song1.wav'  # Or './song.mp3'
-with open('lyrics1.txt', 'r') as f:
-    transcript = f.read()
+# Input paths
+audio_path = 'vocals_fixed.wav'
+lyrics_path = 'lyrics.txt'
+output_json = 'lyrics_vocals_fixed.json'
 
-# Create aligner
-align = ForceAlign(audio_file=audio_path, transcript=transcript)
+# Load the original formatted lyrics
+with open(lyrics_path, 'r') as f:
+    lines = [line.strip().split() for line in f.readlines()]
+
+# Flatten for alignment
+flat_transcript_words = [w for line in lines for w in line]
+
+# Create ForceAlign instance
+align = ForceAlign(audio_file=audio_path, transcript=' '.join(flat_transcript_words))
 
 # Run alignment
 words = align.inference()
 
-# Save results to lyrics.json
-aligned_words = [
-    {"word": word.word, "start": word.time_start, "end": word.time_end}
-    for word in words
-]
+# Build aligned output with original words and line numbers
+aligned_words = []
+w_idx = 0
 
-with open("lyrics1.json", "w") as f:
+for line_num, line in enumerate(lines):
+    for word in line:
+        if w_idx >= len(words):
+            break
+        aligned_word = words[w_idx]
+        aligned_words.append({
+            "word": word,
+            "start": aligned_word.time_start,
+            "end": aligned_word.time_end,
+            "line": line_num
+        })
+        w_idx += 1
+
+# Save result
+with open(output_json, "w") as f:
     json.dump(aligned_words, f, indent=2)
-
-# Print a preview
-for word in aligned_words:
-    print(f"[{word['start']:.2f} - {word['end']:.2f}] {word['word']}")
