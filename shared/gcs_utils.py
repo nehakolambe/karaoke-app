@@ -55,10 +55,12 @@ def gcs_file_exists(gcs_url: str) -> bool:
 
     return blob.exists()
 
-
-def get_song_gcs_url(song_id: str, artifact: str) -> str:
+def get_artifact_url(song_id: str, artifact: str) -> str:
     return f"gs://{GCS_BUCKET_NAME}/songs/{song_id}/{artifact}"
 
 
 def get_instrumental_url(song_id: str) -> str:
-    return get_song_gcs_url(song_id, "instrumental.wav")
+    return get_artifact_url(song_id, "instrumental.wav")
+
+def get_vocals_url(song_id: str) -> str:
+    return get_artifact_url(song_id, "vocals.wav")
