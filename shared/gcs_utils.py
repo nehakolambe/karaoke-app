@@ -1,5 +1,5 @@
 from google.cloud import storage
-from constants import GCS_BUCKET_NAME
+from shared.constants import GCS_BUCKET_NAME
 
 
 def upload_file_to_gcs(gcs_url: str, local_path: str):
