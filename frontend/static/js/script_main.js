@@ -87,63 +87,48 @@ const lyricsBox = document.getElementById('lyrics-box');
 const lyricsUrl = lyricsDiv.dataset.json;
 
 let lyrics = [];
-let currentWordIndex = 0;
+let currentLineIndex = -1;
 
 fetch(lyricsUrl)
     .then(res => res.json())
     .then(data => {
-        console.log("Fetched lyrics data:", data);
         lyrics = data;
-        renderLyrics();
+        renderLyricsLines();
     })
-    .catch(err => console.error("Fetch error:", err));
+    .catch(err => console.error("Failed to load lyrics:", err));
 
-function renderLyrics() {
+function renderLyricsLines() {
     lyricsDiv.innerHTML = '';
 
-    if (!lyrics || lyrics.length === 0) {
-        console.warn("No lyrics to render");
-        return;
-    }
-
-    const lines = {};
-    lyrics.forEach((word, index) => {
-        const lineNumber = word.line ?? 0;
-        if (!lines[lineNumber]) lines[lineNumber] = [];
-        lines[lineNumber].push({ ...word, index });
-    });
-
-    Object.values(lines).forEach(lineWords => {
-        const div = document.createElement('div');
-        lineWords.forEach(({ word, index }) => {
-            const span = document.createElement('span');
-            span.textContent = word + ' ';
-            span.id = `word-${index}`;
-            div.appendChild(span);
-        });
+    lyrics.forEach((lineObj, index) => {
+        const div = document.createElement("div");
+        div.textContent = lineObj.line;
+        div.id = `line-${index}`;
         lyricsDiv.appendChild(div);
     });
 }
 
-function highlightWord(index) {
-    lyrics.forEach((_, i) => {
-        const word = document.getElementById(`word-${i}`);
-        word.classList.toggle('highlight', i === index);
-    });
+function highlightLine(index) {
+    // Remove existing highlight
+    document.querySelectorAll(".highlight").forEach(el => el.classList.remove("highlight"));
 
-    // Scroll the current word into view smoothly if it exists
-    const activeWord = document.getElementById(`word-${index}`);
-    if (activeWord) {
-        activeWord.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const lineEl = document.getElementById(`line-${index}`);
+    if (lineEl) {
+        lineEl.classList.add("highlight");
+        lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 }
 
 audio.ontimeupdate = () => {
-    seekbar.value = audio.currentTime;
+    const t = audio.currentTime;
+    seekbar.value = t;
+
     for (let i = 0; i < lyrics.length; i++) {
-        if (audio.currentTime >= lyrics[i].start && audio.currentTime <= lyrics[i].end) {
-            highlightWord(i);
-            currentWordIndex = i;
+        if (t >= lyrics[i].start && t <= lyrics[i].end) {
+            if (currentLineIndex !== i) {
+                currentLineIndex = i;
+                highlightLine(i);
+            }
             break;
         }
     }
@@ -169,7 +154,7 @@ playBtn.onclick = () => {
 
 restartBtn.onclick = () => {
     audio.currentTime = 0;
-    highlightWord(-1);
+    highlightLine(-1);
 };
 
 fullscreenBtn.onclick = () => {
