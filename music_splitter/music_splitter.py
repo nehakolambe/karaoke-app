@@ -8,7 +8,7 @@ from spleeter.audio.adapter import AudioAdapter
 from spleeter.separator import Separator
 
 from shared import gcs_utils
-from shared.constants import SPLIT_QUEUE_NAME, LYRICS_QUEUE_NAME, RABBITMQ_HOST
+from shared import constants
 
 
 def split_and_upload_instrumental(song_id: str):
@@ -82,16 +82,16 @@ def callback(ch, method, properties, body):
 def start_worker():
     # TODO: Add a health check endpoint implementation.
 
-    connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
+    connection = pika.BlockingConnection(pika.ConnectionParameters(constants.RABBITMQ_HOST))
     channel = connection.channel()
 
-    channel.queue_declare(queue=SPLIT_QUEUE_NAME)
-    channel.queue_declare(queue=LYRICS_QUEUE_NAME)
+    channel.queue_declare(queue=constants.SPLIT_QUEUE_NAME)
+    channel.queue_declare(queue=constants.LYRICS_QUEUE_NAME)
 
     channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(SPLIT_QUEUE_NAME, callback)
+    channel.basic_consume(constants.SPLIT_QUEUE_NAME, callback)
 
-    print("Worker listening on queue: " + SPLIT_QUEUE_NAME)
+    print("Worker listening on queue: " + constants.SPLIT_QUEUE_NAME)
     channel.start_consuming()
 
 

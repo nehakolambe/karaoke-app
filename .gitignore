@@ -9,3 +9,5 @@ music_splitter/output
 
 *.pyc
 *.pyo
+
+*cred*
