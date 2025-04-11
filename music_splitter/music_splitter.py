@@ -81,8 +81,14 @@ def callback(ch, method, properties, body):
 
 def start_worker():
     # TODO: Add a health check endpoint implementation.
+    print("Starting music splitter worker...")
+    credentials = pika.PlainCredentials(constants.RABBITMQ_USER, constants.RABBITMQ_PASS)
+    connection = pika.BlockingConnection(pika.ConnectionParameters(
+        host=constants.RABBITMQ_HOST,
+        port=constants.RABBITMQ_PORT,
+        credentials=credentials
+    ))
 
-    connection = pika.BlockingConnection(pika.ConnectionParameters(constants.RABBITMQ_HOST))
     channel = connection.channel()
 
     channel.queue_declare(queue=constants.SPLIT_QUEUE_NAME)
