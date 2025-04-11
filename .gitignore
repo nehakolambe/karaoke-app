@@ -3,11 +3,20 @@
 .DS_STORE
 downloads/
 
+# Music Splitter
 music_splitter/temp_input/
 *pretrained_models
 music_splitter/output
 
+# Pycache files
 *.pyc
 *.pyo
 
 *cred*
+
+# Terraform state files (local, contains sensitive info)
+*.tfstate
+*.tfstate.*
+
+# Terraform working directory (providers, plugins, caches)
+.terraform/
