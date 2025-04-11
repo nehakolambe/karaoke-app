@@ -1,12 +1,26 @@
 from google.cloud import storage
 from shared.constants import GCS_BUCKET_NAME
+import time
 
 
-
-def upload_file_to_gcs(gcs_url: str, local_path: str):
+# def upload_file_to_gcs(gcs_url: str, local_path: str):
+def upload_file_to_gcs(gcs_url: str, local_path: str, timeout: int = 300, retries: int = 3):
     """
     Uploads a local file to the GCS location specified by a gs:// URL.
     """
+    # assert gcs_url.startswith("gs://"), "GCS URL must start with 'gs://'"
+
+    # path = gcs_url[5:]  # strip 'gs://'
+    # bucket_name, *blob_parts = path.split("/")
+    # blob_path = "/".join(blob_parts)
+
+    # client = storage.Client()
+    # bucket = client.bucket(bucket_name)
+    # blob = bucket.blob(blob_path)
+
+    # blob.upload_from_filename(local_path)
+    # print(f"[GCS] Uploaded: {local_path} --> {gcs_url}")
+
     assert gcs_url.startswith("gs://"), "GCS URL must start with 'gs://'"
 
     path = gcs_url[5:]  # strip 'gs://'
@@ -17,8 +31,17 @@ def upload_file_to_gcs(gcs_url: str, local_path: str):
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_path)
 
-    blob.upload_from_filename(local_path)
-    print(f"[GCS] Uploaded: {local_path} --> {gcs_url}")
+    for attempt in range(1, retries + 1):
+        try:
+            blob.upload_from_filename(local_path, timeout=timeout)
+            print(f"[GCS] Uploaded: {local_path} --> {gcs_url}")
+            return  # success
+        except Exception as e:
+            print(f"[GCS][Attempt {attempt}] Upload failed: {e}")
+            if attempt == retries:
+                print("[GCS] Final retry failed. Raising exception.")
+                raise
+            time.sleep(2 ** attempt)
 
 
 def download_file_from_gcs(gcs_url: str, local_path: str):

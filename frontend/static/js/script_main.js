@@ -53,8 +53,34 @@ document.addEventListener('DOMContentLoaded', function () {
                     data.forEach(hit => {
                         const item = document.createElement('a');
                         item.className = 'dropdown-item';
-                        item.href = `/song/${hit.result.id}?title=${encodeURIComponent(hit.result.title)}&artist=${encodeURIComponent(hit.result.primary_artist.name)}`;
+                        // item.href = `/song/${hit.result.id}?title=${encodeURIComponent(hit.result.title)}&artist=${encodeURIComponent(hit.result.primary_artist.name)}`;
                         item.textContent = hit.result.full_title;
+
+                        item.style.cursor = 'pointer';
+                        item.addEventListener('click', () => {
+                            const title = hit.result.title;
+                            const artist = hit.result.primary_artist.name;
+                            const song_id = hit.result.id;
+
+                            fetch('/start_processing', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ title, artist, song_id })
+                            })
+                            .then(res => res.json())
+                            .then(data => {
+                                if (data.redirect_url) {
+                                    window.location.href = data.redirect_url;
+                                } else {
+                                    alert('Failed to start processing.');
+                                }
+                            })
+                            .catch(err => {
+                                console.error('Error starting processing:', err);
+                                alert('Error occurred while starting processing.');
+                            });
+                        });
+
                         suggestionBox.appendChild(item);
                     });
 
