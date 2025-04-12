@@ -38,15 +38,18 @@
 
     <script>
         const jobId = "{{ job_id }}";
+        const title = "{{ title }}";
+        const artist = "{{ artist }}";
+
         function pollJobStatus() {
-            fetch(`/check_status/${jobId}`)
+            fetch(`http://localhost:5002/job-history/${jobId}`)
                 .then(res => res.json())
                 .then(data => {
-                    if (data.status === "done") {
-                        const songId = data.song_id;
-                        const title = encodeURIComponent(data.title);
-                        const artist = encodeURIComponent(data.artist);
-                        window.location.href = `/song/${songId}?title=${title}&artist=${artist}`;
+                    if (data.status === "complete") {
+                    const songId = jobId.split('-')[0]; // Adjust as needed
+                    window.location.href = `/song/${songId}?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`;
+                    } else if (data.status === "failed") {
+                        window.location.href = "/error";
                     } else {
                         setTimeout(pollJobStatus, 3000);
                     }
@@ -56,6 +59,7 @@
                     setTimeout(pollJobStatus, 5000);
                 });
         }
+
         pollJobStatus();
     </script>
 </body>
