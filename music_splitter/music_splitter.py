@@ -10,6 +10,9 @@ from spleeter.separator import Separator
 from shared import gcs_utils
 from shared import constants
 
+RABBITMQ_HOST = constants.RABBITMQ_HOST
+LYRICS_QUEUE_NAME = constants.LYRICS_QUEUE_NAME
+SPLIT_QUEUE_NAME = constants.SPLIT_QUEUE_NAME
 
 def split_and_upload_instrumental(song_id: str):
     print(f"Processing song ID: {song_id}")
@@ -58,6 +61,35 @@ def split_and_upload_instrumental(song_id: str):
 
     shutil.rmtree(working_dir)
     print(f"Done processing {song_id}")
+    publish_to_lyrics_queue(song_id)
+
+def publish_to_lyrics_queue(song_id):
+    # Connect to RabbitMQ and publish the message to the Sync Lyrics Queue
+    try:
+        connection = pika.BlockingConnection(pika.ConnectionParameters(
+            host=RABBITMQ_HOST,
+            heartbeat=600,
+            blocked_connection_timeout=300,
+            connection_attempts=3,
+            retry_delay=5,
+            socket_timeout=600
+        ))
+        channel = connection.channel()
+        channel.queue_declare(queue=LYRICS_QUEUE_NAME, durable=True)
+        message = {
+            "song_id": song_id,
+            "status": "ready_for_sync_lyrics"
+        }
+        channel.basic_publish(
+            exchange='',
+            routing_key=LYRICS_QUEUE_NAME,
+            body=json.dumps(message)
+        )
+        print(f"Published to Sync Lyrics Queue: {song_id}")
+        connection.close()
+    except Exception as e:
+        print(f"Error publishing to Sync Lyrics Queue: {e}")
+        traceback.print_exc()
 
 def callback(ch, method, properties, body):
     try:
@@ -84,20 +116,24 @@ def start_worker():
     print("Starting music splitter worker...")
     credentials = pika.PlainCredentials(constants.RABBITMQ_USER, constants.RABBITMQ_PASS)
     connection = pika.BlockingConnection(pika.ConnectionParameters(
-        host=constants.RABBITMQ_HOST,
-        port=constants.RABBITMQ_PORT,
-        credentials=credentials
-    ))
+    host=RABBITMQ_HOST,
+    heartbeat=600,
+    blocked_connection_timeout=300,
+    connection_attempts=3,
+    retry_delay=5,
+    socket_timeout=600,
+    credentials=credentials
+))
 
     channel = connection.channel()
 
-    channel.queue_declare(queue=constants.SPLIT_QUEUE_NAME)
-    channel.queue_declare(queue=constants.LYRICS_QUEUE_NAME)
+    channel.queue_declare(queue=SPLIT_QUEUE_NAME, durable=False)
+    # channel.queue_declare(queue=constants.LYRICS_QUEUE_NAME, durable=True)
 
     channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(constants.SPLIT_QUEUE_NAME, callback)
+    channel.basic_consume(SPLIT_QUEUE_NAME, callback)
 
-    print("Worker listening on queue: " + constants.SPLIT_QUEUE_NAME)
+    print("Worker listening on queue: " + SPLIT_QUEUE_NAME)
     channel.start_consuming()
 
 

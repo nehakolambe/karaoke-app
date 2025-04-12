@@ -8,8 +8,10 @@ import pika
 from forcealign import ForceAlign
 
 from shared import gcs_utils
-from shared.constants import LYRICS_QUEUE_NAME, RABBITMQ_HOST
+from shared import constants
 
+RABBITMQ_HOST = constants.RABBITMQ_HOST
+LYRICS_QUEUE_NAME = constants.LYRICS_QUEUE_NAME
 
 def get_genius_url(song_id: str) -> str:
     return f"https://genius.com/songs/{song_id}"
@@ -171,7 +173,7 @@ def start_worker():
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
     channel = connection.channel()
 
-    channel.queue_declare(queue=LYRICS_QUEUE_NAME)
+    channel.queue_declare(queue=LYRICS_QUEUE_NAME, durable=True)
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(LYRICS_QUEUE_NAME, callback)
 

@@ -9,3 +9,4 @@ RABBITMQ_PASS = os.getenv('RABBITMQ_PASS', 'password')
 GCS_BUCKET_NAME = 'bda-media-bucket'
 SPLIT_QUEUE_NAME = "split-jobs"
 LYRICS_QUEUE_NAME = "lyrics-jobs"
+DOWNLOAD_QUEUE_NAME = "download-jobs"

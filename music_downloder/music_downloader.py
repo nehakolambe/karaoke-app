@@ -4,15 +4,15 @@ import traceback
 import yt_dlp
 import pika
 from shared.gcs_utils import upload_file_to_gcs, gcs_file_exists, get_instrumental_url, get_vocals_url  # Fixed import
+from shared import constants
 
 # Constants
 DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
-
-RABBITMQ_HOST = "rabbitmq"  
-DOWNLOAD_QUEUE_NAME = "download_jobs"
-MUSIC_SPLITTER_QUEUE_NAME = "music_splitter_queue"
-BUCKET_NAME = "bda-media-bucket"
+RABBITMQ_HOST = constants.RABBITMQ_HOST
+DOWNLOAD_QUEUE_NAME = constants.RABBITMQ_HOST
+MUSIC_SPLITTER_QUEUE_NAME = constants.RABBITMQ_HOST
+BUCKET_NAME = constants.GCS_BUCKET_NAME
 
 def download_song_to_gcs(song_id, song_name, artist_name):
     print(f"Downloading: {song_name} by {artist_name} (ID: {song_id})")
@@ -78,11 +78,13 @@ def publish_to_music_splitter_queue(song_id, song_name, artist_name):
         traceback.print_exc()
 
 def callback(ch, method, properties, body):
+    print("Callback triggered")
     try:
         message = json.loads(body)
+        print(message)
         song_id = message["song_id"]
-        song_name = message["song_name"]
-        artist_name = message["artist_name"]
+        song_name = message["title"]
+        artist_name = message["artist"]
 
         print(f"Received job: {song_id}")
 
@@ -103,7 +105,7 @@ def start_worker():
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
     channel = connection.channel()
 
-    channel.queue_declare(queue=DOWNLOAD_QUEUE_NAME)
+    channel.queue_declare(queue=DOWNLOAD_QUEUE_NAME, durable=True)
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(DOWNLOAD_QUEUE_NAME, callback)
 

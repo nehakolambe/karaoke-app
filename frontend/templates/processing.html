@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Processing {{ title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 100px;
+            text-align: center;
+        }
+        .loader {
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid #007bff;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 30px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .job-id {
+            font-size: 0.9rem;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <h2>🎵 {{ title }}</h2>
+    <p>by {{ artist }}</p>
+
+    <div class="loader"></div>
+    <p class="job-id">Job ID: {{ job_id }}</p>
+    <p>We’re preparing your karaoke track. Hang tight!</p>
+
+    <script>
+        const jobId = "{{ job_id }}";
+        function pollJobStatus() {
+            fetch(`/check_status/${jobId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === "done") {
+                        const songId = data.song_id;
+                        const title = encodeURIComponent(data.title);
+                        const artist = encodeURIComponent(data.artist);
+                        window.location.href = `/song/${songId}?title=${title}&artist=${artist}`;
+                    } else {
+                        setTimeout(pollJobStatus, 3000);
+                    }
+                })
+                .catch(err => {
+                    console.error("Polling error:", err);
+                    setTimeout(pollJobStatus, 5000);
+                });
+        }
+        pollJobStatus();
+    </script>
+</body>
+</html>
