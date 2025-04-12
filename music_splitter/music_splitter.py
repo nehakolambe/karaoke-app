@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import shutil
@@ -13,14 +14,51 @@ from shared import constants
 RABBITMQ_HOST = constants.RABBITMQ_HOST
 LYRICS_QUEUE_NAME = constants.LYRICS_QUEUE_NAME
 SPLIT_QUEUE_NAME = constants.SPLIT_QUEUE_NAME
+EVENT_TRACKER_QUEUE_NAME = constants.EVENT_TRACKER_QUEUE_NAME
 
-def split_and_upload_instrumental(song_id: str):
+# Queue functions
+def notify_event_tracker(ch, status, job_id="", song_id="", error_message=None):
+    event_tracker_message = {
+        "job_id": job_id,
+        "song_id": str(song_id),
+        "source" : "splitter",
+        "status" : status,
+        "timestamp": str(datetime.datetime.now(datetime.timezone.utc).isoformat())
+    }
+
+    if error_message:
+        event_tracker_message["error_message"] = error_message
+
+    ch.basic_publish(
+        exchange="",
+        routing_key=EVENT_TRACKER_QUEUE_NAME,
+        body=json.dumps(event_tracker_message),
+        properties=pika.BasicProperties()
+    )
+    print(f"[EventTracker] Notified event tracker about music splitting status for job: {job_id}")
+
+def publish_to_lyrics_syncer_queue(ch, job_id, song_id, song_name, artist_name):
+    splitter_message = {
+        "job_id": job_id,
+        "song_id": song_id,
+        "song_name": song_name,
+        "artist_name": artist_name,
+    }
+    ch.basic_publish(
+        exchange='',
+        routing_key=LYRICS_QUEUE_NAME,
+        body=json.dumps(splitter_message)
+    )
+    print(f"Published to lyrics syncer queue for job_id: {job_id}, song_id: {song_id}")
+
+# Core functionality
+def split_and_upload_instrumental(job_id: str, song_id: str):
     print(f"Processing song ID: {song_id}")
 
     instrumental_url = gcs_utils.get_instrumental_url(song_id)
     vocals_url = gcs_utils.get_vocals_url(song_id)
     if gcs_utils.gcs_file_exists(instrumental_url) and gcs_utils.gcs_file_exists(vocals_url):
-        print(f"Instrumental and vocals files already exist, skipping processing for {song_id}")
+        print(f"Instrumental and vocals files already exist, skipping processing for job_id: {job_id}, song_id: {song_id}")
         return
 
     # Use persistent working dir
@@ -61,53 +99,36 @@ def split_and_upload_instrumental(song_id: str):
 
     shutil.rmtree(working_dir)
     print(f"Done processing {song_id}")
-    publish_to_lyrics_queue(song_id)
-
-def publish_to_lyrics_queue(song_id):
-    # Connect to RabbitMQ and publish the message to the Sync Lyrics Queue
-    try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters(
-            host=RABBITMQ_HOST,
-            heartbeat=600,
-            blocked_connection_timeout=300,
-            connection_attempts=3,
-            retry_delay=5,
-            socket_timeout=600
-        ))
-        channel = connection.channel()
-        channel.queue_declare(queue=LYRICS_QUEUE_NAME, durable=True)
-        message = {
-            "song_id": song_id,
-            "status": "ready_for_sync_lyrics"
-        }
-        channel.basic_publish(
-            exchange='',
-            routing_key=LYRICS_QUEUE_NAME,
-            body=json.dumps(message)
-        )
-        print(f"Published to Sync Lyrics Queue: {song_id}")
-        connection.close()
-    except Exception as e:
-        print(f"Error publishing to Sync Lyrics Queue: {e}")
-        traceback.print_exc()
 
 def callback(ch, method, properties, body):
     try:
         message = json.loads(body)
+        job_id = message["job_id"]
         song_id = message["song_id"]
+        song_name = message["song_name"]
+        artist_name = message["artist_name"]
         print(f"Received message for songId: {song_id}")
 
         try:
-            split_and_upload_instrumental(song_id)
+            split_and_upload_instrumental(job_id, song_id)
+            # Notify event tracker
+            notify_event_tracker(ch, "Completed", job_id, song_id)
+            # Publish a job to lyrics syncer
+            publish_to_lyrics_syncer_queue(ch, job_id, song_id, song_name, artist_name)
+            # Send ack to rabbitmq broker.
             ch.basic_ack(delivery_tag=method.delivery_tag)
         except Exception as processing_error:
             print(f"Error while processing songId {song_id}: {processing_error}")
+            # TODO: Notify event tracker about failure
             traceback.print_exc()
+            notify_event_tracker(ch, "Failed", job_id, song_id,
+                                 f"Internal error while splitting music for job: {job_id}, song ID: {song_id}")
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-
     except Exception as e:
+        # TODO: Notify event tracker about failure
         print("Unexpected error:", e)
         traceback.print_exc()
+        notify_event_tracker(ch, "Failed", error_message=f"Malformed message received: {body}, error: {e}")
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 
@@ -116,19 +137,20 @@ def start_worker():
     print("Starting music splitter worker...")
     credentials = pika.PlainCredentials(constants.RABBITMQ_USER, constants.RABBITMQ_PASS)
     connection = pika.BlockingConnection(pika.ConnectionParameters(
-    host=RABBITMQ_HOST,
-    heartbeat=600,
-    blocked_connection_timeout=300,
-    connection_attempts=3,
-    retry_delay=5,
-    socket_timeout=600,
-    credentials=credentials
-))
+        host=RABBITMQ_HOST,
+        heartbeat=600,
+        blocked_connection_timeout=300,
+        connection_attempts=3,
+        retry_delay=5,
+        socket_timeout=600,
+        credentials=credentials
+    ))
 
     channel = connection.channel()
 
-    channel.queue_declare(queue=SPLIT_QUEUE_NAME, durable=False)
-    # channel.queue_declare(queue=constants.LYRICS_QUEUE_NAME, durable=True)
+    channel.queue_declare(queue=EVENT_TRACKER_QUEUE_NAME)
+    channel.queue_declare(queue=LYRICS_QUEUE_NAME)
+    channel.queue_declare(queue=SPLIT_QUEUE_NAME)
 
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(SPLIT_QUEUE_NAME, callback)

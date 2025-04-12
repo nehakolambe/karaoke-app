@@ -22,6 +22,7 @@ SERVICE_ACCOUNT_PATH = os.getenv("SERVICE_ACCOUNT_PATH")
 RABBITMQ_HOST = constants.RABBITMQ_HOST
 DOWNLOAD_QUEUE_NAME = constants.RABBITMQ_HOST
 BUCKET_NAME = constants.GCS_BUCKET_NAME
+EVENT_TRACKER_QUEUE_NAME = constants.EVENT_TRACKER_QUEUE_NAME
 app.secret_key = os.getenv("FLASK_SECRET")
 
 @app.route('/set_user')
@@ -213,26 +214,43 @@ def start_processing():
 
     job_id = str(uuid.uuid4())
 
-    message = {
+    event_tracker_message = {
+        "job_id": job_id,
+        "song_id": str(song_id),
+        "timestamp": str(datetime.datetime.now(datetime.timezone.utc).isoformat())
+    }
+
+    download_message = {
         "job_id": job_id,
         "song_id": str(song_id),
         "title": title,
         "artist": artist
     }
-    print("[Queueing Job]", message)
+    print("[Queueing Job]", download_message)
 
     try:
         connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
         channel = connection.channel()
-        channel.queue_declare(queue=DOWNLOAD_QUEUE_NAME, durable=True)
 
+        # Notify the event tracker about the new job.
+        channel.queue_declare(queue=EVENT_TRACKER_QUEUE_NAME)
+        channel.basic_publish(
+            exchange="",
+            routing_key=EVENT_TRACKER_QUEUE_NAME,
+            body=json.dumps(event_tracker_message),
+            properties=pika.BasicProperties()
+        )
+
+        # TODO: Remove durability
+        channel.queue_declare(queue=DOWNLOAD_QUEUE_NAME, durable=True)
         channel.basic_publish(
             exchange='',
             routing_key=DOWNLOAD_QUEUE_NAME,
-            body=json.dumps(message),
+            body=json.dumps(download_message),
             properties=pika.BasicProperties(delivery_mode=2)
         )
 
+        # TODO: Cleanup?
         # Store metadata in job_status_store immediately
         job_status_store[job_id] = {
             "status": "pending",
