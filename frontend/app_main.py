@@ -57,6 +57,10 @@ def history():
 def logout():
     return "<h2>Logged out (dummy action)</h2><a href='/'>Go to Home</a>"
 
+@app.route('/error')
+def error_page():
+    return render_template('error.html')
+
 @app.route('/search')
 def search():
     query = request.args.get("q")
