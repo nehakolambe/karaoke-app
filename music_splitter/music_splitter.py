@@ -99,22 +99,11 @@ def callback(ch, method, properties, body):
 
         try:
             split_and_upload_instrumental(song_id)
-            try:
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-            except Exception as ack_err:
-                print(f"WARNING: Failed to ACK message {song_id}: {ack_err}")
+            ch.basic_ack(delivery_tag=method.delivery_tag)
         except Exception as processing_error:
             print(f"Error while processing songId {song_id}: {processing_error}")
             traceback.print_exc()
-            try:
-                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-            except Exception as nack_err:
-                print(f"WARNING: Failed to NACK message {song_id}: {nack_err}")
-        #     ch.basic_ack(delivery_tag=method.delivery_tag)
-        # except Exception as processing_error:
-        #     print(f"Error while processing songId {song_id}: {processing_error}")
-        #     traceback.print_exc()
-        #     ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
     except Exception as e:
         print("Unexpected error:", e)
@@ -125,22 +114,16 @@ def callback(ch, method, properties, body):
 def start_worker():
     # TODO: Add a health check endpoint implementation.
     print("Starting music splitter worker...")
-    # credentials = pika.PlainCredentials(constants.RABBITMQ_USER, constants.RABBITMQ_PASS)
-    # connection = pika.BlockingConnection(pika.ConnectionParameters(
-    #     host=constants.RABBITMQ_HOST,
-    #     port=constants.RABBITMQ_PORT,
-    #     credentials=credentials
-    # ))
+    credentials = pika.PlainCredentials(constants.RABBITMQ_USER, constants.RABBITMQ_PASS)
     connection = pika.BlockingConnection(pika.ConnectionParameters(
     host=RABBITMQ_HOST,
     heartbeat=600,
     blocked_connection_timeout=300,
     connection_attempts=3,
     retry_delay=5,
-    socket_timeout=600
+    socket_timeout=600,
+    credentials=credentials
 ))
-
-    # connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
 
     channel = connection.channel()
 
