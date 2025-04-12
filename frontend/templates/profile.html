@@ -1,6 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Profile - Karaoke App{% endblock %}
+
 {% block content %}
-  <h2>Profile Page</h2>
-  <p>This is a dummy profile page.</p>
+<div class="container text-center mt-5">
+  {% if picture %}
+  <img src="{{ picture }}" alt="Profile picture" class="rounded-circle" width="150" height="150">
+  {% endif %}
+  
+  <h2>Hello, {{ name }}!</h2>
+
+  <p class="mt-3"><strong>Email:</strong> {{ email }}</p>
+
+  <a href="/logout" class="btn btn-danger mt-4">Log out</a>
+</div>
 {% endblock %}
