@@ -25,6 +25,14 @@ resource "kubernetes_deployment" "music_splitter" {
       }
 
       spec {
+        # Useful to let minikube pull from Google artifact registry.
+        dynamic "image_pull_secrets" {
+          for_each = var.use_image_pull_secret ? [1] : []
+          content {
+            name = "regcred"
+          }
+        }
+
         container {
           name  = "music-splitter"
           image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/music-splitter:latest"
