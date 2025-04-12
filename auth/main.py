@@ -7,16 +7,15 @@ from datetime import datetime
 import os
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
+from google.cloud import firestore
 
 load_dotenv()
 
-# Firestore setup
-from google.cloud import firestore
-
 # ---------- CONFIGURATION ----------
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "ss")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "ss")
-SECRET_KEY = os.getenv("SECRET_KEY", "ss")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+SECRET_KEY = os.getenv("SECRET_KEY")
+BUCKET_NAME = os.getenv("PROJECT_NAME")
 
 # ---------- FASTAPI SETUP ----------
 app = FastAPI()
@@ -28,7 +27,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")  # Set the directory for templates
 
 # ---------- FIRESTORE CLIENT ----------
-db = firestore.Client(project="music-separation-assignment")
+db = firestore.Client(project=BUCKET_NAME)
 
 # ---------- OAUTH CONFIG ----------
 oauth = OAuth()
@@ -106,10 +105,10 @@ async def auth_callback(request: Request):
         print("[INFO] Existing user. Updating name.")
         user_doc.update({"name": user_name})
 
-    request.session["user"] = {"email": user_email, "name": user_name}
+    request.session["user"] = {"email": user_email, "name": user_name, "picture": user_picture}
     print("[INFO] Session updated")
 
-    return RedirectResponse(url="http://127.0.0.1:5001/")
+    return RedirectResponse(f"http://127.0.0.1:5001/set_user?name={user_name}&email={user_email}&picture={user_picture}")
 
 
 # ---------- LOGOUT ----------

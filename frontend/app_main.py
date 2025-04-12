@@ -1,5 +1,5 @@
 import requests
-from flask import Flask, render_template, request, jsonify, Response
+from flask import Flask, render_template, request, jsonify, Response, session, redirect
 import re
 import datetime
 from google.cloud import storage
@@ -22,10 +22,30 @@ SERVICE_ACCOUNT_PATH = os.getenv("SERVICE_ACCOUNT_PATH")
 RABBITMQ_HOST = constants.RABBITMQ_HOST
 DOWNLOAD_QUEUE_NAME = constants.RABBITMQ_HOST
 BUCKET_NAME = constants.GCS_BUCKET_NAME
+app.secret_key = os.getenv("FLASK_SECRET")
+
+@app.route('/set_user')
+def set_user():
+    name = request.args.get('name')
+    email = request.args.get('email')
+    picture = request.args.get('picture')
+
+    if name:
+        session['name'] = name
+    if email:
+        session['email'] = email
+    if picture:
+        session['picture'] = picture
+
+    return redirect('/')
 
 @app.context_processor
 def inject_user():
-    return dict(name="John") # Replace it with person name call
+    return {
+        "name": session.get("name", "Guest"),
+        "email": session.get("email"),
+        "picture": session.get("picture")
+    }
 
 def generate_signed_url(bucket_name, blob_name, expiration_minutes=10):
     credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_PATH)
@@ -55,7 +75,8 @@ def history():
 
 @app.route('/logout')
 def logout():
-    return "<h2>Logged out (dummy action)</h2><a href='/'>Go to Home</a>"
+    session.clear()
+    return redirect("http://127.0.0.1:8000/")
 
 @app.route('/error')
 def error_page():
