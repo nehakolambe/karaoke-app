@@ -3,6 +3,8 @@ import pika
 from google.cloud import firestore
 from datetime import datetime
 
+from shared import constants
+
 # Firestore client setup
 db = firestore.Client()
 collection_name = "job_history"  # Save everything in job_history collection
@@ -89,13 +91,13 @@ def callback(ch, method, properties, body):
 
 # RabbitMQ setup
 def start_event_tracker():
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host="localhost"))
+    connection = pika.BlockingConnection(pika.ConnectionParameters(host=constants.RABBITMQ_HOST))
     channel = connection.channel()
 
-    queue_name = "job_status_events"
-    channel.queue_declare(queue=queue_name, durable=True)
+    queue_name = constants.EVENT_TRACKER_QUEUE_NAME
+    channel.queue_declare(queue=queue_name)
 
-    channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
+    channel.basic_consume(queue=queue_name, on_message_callback=callback)
 
     print("Event Tracker is listening for messages...")
     channel.start_consuming()

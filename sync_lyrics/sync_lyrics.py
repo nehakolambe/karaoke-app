@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import traceback
@@ -7,12 +8,36 @@ from bs4 import BeautifulSoup
 import pika
 from forcealign import ForceAlign
 
+from music_downloader.music_downloader import MUSIC_SPLITTER_QUEUE_NAME
 from shared import gcs_utils
 from shared import constants
 
 RABBITMQ_HOST = constants.RABBITMQ_HOST
 LYRICS_QUEUE_NAME = constants.LYRICS_QUEUE_NAME
+EVENT_TRACKER_QUEUE_NAME = constants.EVENT_TRACKER_QUEUE_NAME
 
+# Queue functions
+def notify_event_tracker(ch, status, job_id="", song_id="", error_message=None):
+    event_tracker_message = {
+        "job_id": job_id,
+        "song_id": str(song_id),
+        "source" : "lyrics_syncer",
+        "status" : status,
+        "timestamp": str(datetime.datetime.now(datetime.timezone.utc).isoformat())
+    }
+
+    if error_message:
+        event_tracker_message["error_message"] = error_message
+
+    ch.basic_publish(
+        exchange="",
+        routing_key=EVENT_TRACKER_QUEUE_NAME,
+        body=json.dumps(event_tracker_message),
+        properties=pika.BasicProperties()
+    )
+    print(f"[EventTracker] Notified event tracker about lyrics syncing status for job: {job_id}")
+
+# Core functionality
 def get_genius_url(song_id: str) -> str:
     return f"https://genius.com/songs/{song_id}"
 
@@ -144,6 +169,7 @@ def align_lyrics(song_id: str):
 def callback(ch, method, properties, body):
     try:
         message = json.loads(body)
+        job_id = message["job_id"]
         song_id = message["song_id"]
         print(f"[Lyrics Worker] Received message for song_id: {song_id}")
 
@@ -151,21 +177,30 @@ def callback(ch, method, properties, body):
             # Step 1: Download lyrics. If it fails, skip alignment.
             if not download_and_store_lyrics(song_id):
                 print(f"[Lyrics Worker] Lyrics download failed for {song_id}, skipping.")
+                # Notify event tracker about failure.
+                notify_event_tracker(ch, "Failed", job_id, song_id,
+                                     f"Lyrics download failed for job {job_id}, song {song_id}")
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
                 return
 
             # Step 2: Align
             align_lyrics(song_id)
+
+            # Notify event tracker about success
+            notify_event_tracker(ch, "Completed", job_id, song_id)
             ch.basic_ack(delivery_tag=method.delivery_tag)
 
         except Exception as processing_error:
             print(f"[Lyrics Worker] Error processing song_id {song_id}: {processing_error}")
             traceback.print_exc()
+            notify_event_tracker(ch, "Failed", job_id, song_id,
+                                 f"Internal error while syncing lyrics for job: {job_id}, song ID: {song_id}-->\n{processing_error}")
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
     except Exception as e:
         print("[Lyrics Worker] Unexpected error:", e)
         traceback.print_exc()
+        notify_event_tracker(ch, "Failed", error_message=f"Malformed message received: {body}, error: {e}")
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 
@@ -173,7 +208,9 @@ def start_worker():
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
     channel = connection.channel()
 
-    channel.queue_declare(queue=LYRICS_QUEUE_NAME, durable=True)
+    channel.queue_declare(queue=EVENT_TRACKER_QUEUE_NAME)
+
+    channel.queue_declare(queue=LYRICS_QUEUE_NAME)
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(LYRICS_QUEUE_NAME, callback)
 

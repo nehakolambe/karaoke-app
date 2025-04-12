@@ -10,3 +10,4 @@ GCS_BUCKET_NAME = 'bda-media-bucket'
 SPLIT_QUEUE_NAME = "split-jobs"
 LYRICS_QUEUE_NAME = "lyrics-jobs"
 DOWNLOAD_QUEUE_NAME = "download-jobs"
+EVENT_TRACKER_QUEUE_NAME = "event-notifications"
