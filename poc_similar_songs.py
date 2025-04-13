@@ -1,8 +1,8 @@
 import requests
 import re
 
-LASTFM_API_KEY = "<>enter-lastfm-api"
-GENIUS_API_KEY = "<enter-genius-api>"
+LASTFM_API_KEY = "9400d086d8cb09c8f3db5004d15d36e8"
+GENIUS_API_KEY = "Su_sv_qBB0tEdQrsGa6q-W84uzxU2zMdhuvag2nq4CLF0wrKosbhCzFMToY0nsjn"
 
 GENIUS_SEARCH_URL = "https://api.genius.com/search"
 
@@ -18,8 +18,10 @@ def search_genius_songs(query):
     return None
 
 def clean_song_title(full_title):
-    # Remove ' by ...' with optional spaces before 'by'
-    full_title = re.sub(r"\s+by\s+.*", "", full_title, flags=re.IGNORECASE)
+    # Remove ' by ARTIST' only if it appears at the end
+    if re.search(r"\s+by\s+\S+$", full_title, re.IGNORECASE):
+        full_title = re.sub(r"\s+by\s+\S+$", "", full_title, flags=re.IGNORECASE)
+
     # Remove text in parentheses (like (From "Movie"))
     full_title = re.sub(r"\(.*?\)", "", full_title)
     # Remove anything after a dash (like - Remix)
@@ -85,4 +87,4 @@ def get_similar_songs_from_input(user_input):
         print(f"- {t['name']} by {t['artist']['name']}")
 
 # Example usage
-get_similar_songs_from_input("senorita")
+get_similar_songs_from_input("Shape of You")

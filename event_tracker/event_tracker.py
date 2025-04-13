@@ -63,31 +63,60 @@ def update_firestore(job_id, song_id, source, status, timestamp, error_message):
 def callback(ch, method, properties, body):
     try:
         data = json.loads(body.decode())
-        job_id = data.get("job_id")
-        song_id = data.get("song_id")
-        timestamp = data.get("timestamp")
         source = data.get("source")
-
-        if not all([job_id, song_id, timestamp, source]):
-            raise ValueError("Missing required fields in message")
+        if not source:
+            raise ValueError("Missing 'source' in message")
 
         if source == "frontend":
+            job_id = data.get("job_id")
+            song_id = data.get("song_id")
+            timestamp = data.get("timestamp")
+            if not all([job_id, song_id, timestamp]):
+                raise ValueError("Missing required fields for 'frontend'")
             update_firestore_new_job(job_id, song_id, timestamp)
 
         elif source in ["downloader", "splitter", "lyrics_syncer"]:
+            job_id = data.get("job_id")
+            song_id = data.get("song_id")
+            timestamp = data.get("timestamp")
             status = data.get("status")
             error_message = data.get("error_message", "NULL")
+
+            if not all([job_id, song_id, timestamp, status]):
+                raise ValueError("Missing required fields for processing update")
 
             if status not in ["Completed", "Failed"]:
                 raise ValueError(f"Invalid status: {status}. Must be 'Completed' or 'Failed'.")
 
             update_firestore(job_id, song_id, source, status, timestamp, error_message)
 
+        elif source == "history":
+            song_id = data.get("song_id")
+            timestamp = data.get("timestamp")
+            user_email = data.get("user_email")
+            if not all([song_id, timestamp, user_email]):
+                raise ValueError("Missing required fields for 'history'")
+
+            user_ref = db.collection("users").document(user_email)
+            user_doc = user_ref.get()
+            if user_doc.exists:
+                user_ref.update({
+                    "downloaded_songs": firestore.ArrayUnion([song_id])
+                })
+            else:
+                user_ref.set({
+                    "downloaded_songs": [song_id]
+                })
+            print(f"Added song {song_id} to user {user_email}'s history.")
+
         else:
             raise ValueError(f"Unknown source: {source}")
 
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+
     except Exception as e:
         print(f"Error processing message: {e}")
+        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 # RabbitMQ setup
 def start_event_tracker():

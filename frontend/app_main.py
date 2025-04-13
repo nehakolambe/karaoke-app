@@ -1,8 +1,8 @@
 import requests
-from flask import Flask, render_template, request, jsonify, Response, session, redirect
+from flask import Flask, render_template, request, jsonify, Response, session, redirect, url_for
 import re
 import datetime
-from google.cloud import storage
+from google.cloud import storage, firestore
 from google.oauth2 import service_account
 from dotenv import load_dotenv
 import os
@@ -13,17 +13,18 @@ from shared import constants
 
 app = Flask(__name__)
 load_dotenv()
+db = firestore.Client()
 
 # ---------- CONFIGURATION ----------
 LASTFM_API_KEY = os.getenv("LASTFM_API_KEY")
 GENIUS_API_KEY = os.getenv("GENIUS_API_KEY")
 GENIUS_SEARCH_URL = os.getenv("GENIUS_SEARCH_URL")
 SERVICE_ACCOUNT_PATH = os.getenv("SERVICE_ACCOUNT_PATH")
-RABBITMQ_HOST = constants.RABBITMQ_HOST
-DOWNLOAD_QUEUE_NAME = constants.RABBITMQ_HOST
-BUCKET_NAME = constants.GCS_BUCKET_NAME
-EVENT_TRACKER_QUEUE_NAME = constants.EVENT_TRACKER_QUEUE_NAME
 app.secret_key = os.getenv("FLASK_SECRET")
+RABBITMQ_HOST = constants.RABBITMQ_HOST
+BUCKET_NAME = constants.GCS_BUCKET_NAME
+DOWNLOAD_QUEUE_NAME = constants.DOWNLOAD_QUEUE_NAME
+EVENT_TRACKER_QUEUE_NAME = constants.EVENT_TRACKER_QUEUE_NAME
 
 @app.route('/set_user')
 def set_user():
@@ -62,9 +63,51 @@ def generate_signed_url(bucket_name, blob_name, expiration_minutes=10):
     )
     return url
 
+def get_title_artist_from_genius(song_id):
+    headers = {"Authorization": f"Bearer {GENIUS_API_KEY}"}
+    response = requests.get(f"https://api.genius.com/songs/{song_id}", headers=headers)
+    if response.status_code == 200:
+        song = response.json().get("response", {}).get("song", {})
+        return song.get("title"), song.get("primary_artist", {}).get("name")
+    return None, None
+
+
 @app.route('/')
 def home():
-    return render_template('home.html')
+    if "email" not in session:
+        return render_template('home.html', history_songs=[], similar_by_history=[])
+
+    user_email = session["email"]
+    print(user_email)
+    user_doc = db.collection("users").document(user_email).get()
+    print(user_doc)
+
+    history_songs = []
+    similar_by_history = []
+
+    if user_doc.exists:
+        song_ids = user_doc.to_dict().get("downloaded_songs", [])[-8:]  # show recent 8
+        for song_id in song_ids:
+            # Get song title/artist from Genius
+            title, artist = get_title_artist_from_genius(song_id)
+            if not title or not artist:
+                continue
+            image = get_genius_thumbnail(title, artist)
+
+            history_songs.append({
+                "song_id": song_id,
+                "title": title,
+                "artist": artist,
+                "image": image or "https://via.placeholder.com/150"
+            })
+            similar = get_similar_songs_from_lastfm(artist, title)
+            for s in similar:
+                s["source_song_id"] = song_id  # for grouping if needed
+            similar_by_history.extend(similar)
+
+    return render_template('home.html',
+                        history_songs=history_songs,
+                        similar_by_history=similar_by_history)
 
 @app.route('/profile')
 def profile():
@@ -135,6 +178,17 @@ def get_genius_thumbnail(title, artist):
             return hits[0]["result"]["song_art_image_thumbnail_url"]
     return None
 
+def get_genius_song_id(title, artist):
+    headers = {"Authorization": f"Bearer {GENIUS_API_KEY}"}
+    params = {"q": f"{title} {artist}"}
+    response = requests.get(GENIUS_SEARCH_URL, headers=headers, params=params)
+
+    if response.status_code == 200:
+        hits = response.json()["response"]["hits"]
+        if hits:
+            return hits[0]["result"]["id"]  # ← Genius song ID
+    return None
+
 def get_similar_songs_from_lastfm(artist, track):
     # track = track.strip().lower().title()
     # artist = artist.strip().lower().title()
@@ -158,6 +212,8 @@ def get_similar_songs_from_lastfm(artist, track):
         artist = t['artist']['name']
         genius_img = get_genius_thumbnail(title, artist)
         t['genius_image'] = genius_img or 'https://via.placeholder.com/150'
+        genius_id = get_genius_song_id(title, artist)
+        t['song_id'] = genius_id
 
     return similar_tracks
 
@@ -190,20 +246,49 @@ def song_page(song_id):
     # Fetch similar songs
     similar_songs = get_similar_songs_from_lastfm(artist, track)
 
-    audio_blob = "songs/test_dnce/original.wav"
+    audio_blob = f"songs/{song_id}/original.wav"
     song_url = generate_signed_url(BUCKET_NAME, audio_blob)
+
+    user_email = session.get("email")
+    if user_email:
+        try:
+            connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
+            channel = connection.channel()
+            channel.queue_declare(queue=EVENT_TRACKER_QUEUE_NAME)
+
+            history_message = {
+                "song_id": str(song_id),
+                "timestamp": str(datetime.datetime.now(datetime.timezone.utc).isoformat()),
+                "source": "history",
+                "user_email": user_email
+            }
+
+            channel.basic_publish(
+                exchange="",
+                routing_key=EVENT_TRACKER_QUEUE_NAME,
+                body=json.dumps(history_message),
+                properties=pika.BasicProperties()
+            )
+            connection.close()
+            print(f"[song_page] Logged song view for {user_email} - {song_id}")
+        except Exception as e:
+            print(f"Error sending play event to event tracker: {e}")
+
 
     return render_template("song.html",
                         song_title=raw_title,
                         song_artist=raw_artist,
                         song_id=song_id,
                         song_url=song_url,
-                        lyrics_url="/get_lyrics/test_dnce/lyrics5_lines.json",
+                        lyrics_url=f"/get_lyrics/{song_id}/lyrics.json",
                         similar_songs=similar_songs)
 
 @app.route('/start_processing', methods=['POST'])
 def start_processing():
-    data = request.json
+    if request.is_json:
+        data = request.get_json()
+    else:
+        data = request.form
 
     title = data.get("title")
     artist = data.get("artist")
@@ -217,7 +302,8 @@ def start_processing():
     event_tracker_message = {
         "job_id": job_id,
         "song_id": str(song_id),
-        "timestamp": str(datetime.datetime.now(datetime.timezone.utc).isoformat())
+        "timestamp": str(datetime.datetime.now(datetime.timezone.utc).isoformat()),
+        "source": "frontend",
     }
 
     download_message = {
@@ -263,18 +349,22 @@ def start_processing():
         print("Error queuing task:", e)
         return jsonify({"error": "Failed to queue task", "details": str(e)}), 500
 
-    return jsonify({
-        "job_id": job_id,
-        "song_id": song_id,
-        "redirect_url": f"/processing/{job_id}?title={title}&artist={artist}"
-    }), 200
+    if request.is_json:
+        return jsonify({
+            "job_id": job_id,
+            "song_id": song_id,
+            "redirect_url": f"/processing/{job_id}?title={title}&artist={artist}&song={song_id}"
+        }), 200
+    else:
+        return redirect(url_for('processing_page', job_id=job_id, title=title, artist=artist, song=song_id))
 
 @app.route('/processing/<job_id>')
 def processing_page(job_id):
     title = request.args.get("title", "Loading...")
     artist = request.args.get("artist", "Please wait")
-    print(f"[processing_page] job_id={job_id}, title={title}, artist={artist}")
-    return render_template('processing.html', job_id=job_id, title=title, artist=artist)
+    song = request.args.get("song", "Please wait")
+    print(f"[processing_page] job_id={job_id}, title={title}, artist={artist}, song={song}")
+    return render_template('processing.html', job_id=job_id, title=title, artist=artist, song=song)
 
 job_status_store = {}
 

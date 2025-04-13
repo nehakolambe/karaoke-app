@@ -1,5 +1,55 @@
 {% extends "base.html" %}
 {% block title %}Home - VoxOff{% endblock %}
 {% block content %}
-<!-- You can put any homepage-specific content here -->
+    {% if not email %}
+        <div class="alert alert-info mt-4 text-center w-75 mx-auto">
+            <h5>Login to get started!</h5>
+            <h5>Start playing songs to help us build a feed of songs you'll love.</h5>
+        </div>
+    {% else %}
+        <div class="mt-4 text-center">
+            <h5>Welcome back, {{ name }}!</h5>
+        </div>
+
+        {% if history_songs %}
+            <div class="container mt-5">
+                <h4 class="mb-3">Previously Played</h4>
+                <div class="row row-cols-1 row-cols-md-4 gx-4 gy-5">
+                    {% for song in history_songs %}
+                        <div class="col">
+                            <div class="card h-100">
+                                <img src="{{ song.image }}" class="card-img-top" alt="{{ song.title }}">
+                                <div class="card-body">
+                                    <h6 class="card-title">{{ song.title }}</h6>
+                                    <p class="card-text text-muted">{{ song.artist }}</p>
+                                    <a href="/song/{{ song.song_id }}?title={{ song.title }}&artist={{ song.artist }}" class="btn btn-sm btn-outline-primary">Play Again</a>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+
+        {% if similar_by_history %}
+            <hr class="my-5">
+            <div class="container">
+                <h4 class="mb-3">You might also like</h4>
+                <div class="row row-cols-1 row-cols-md-4 gx-4 gy-5">
+                    {% for song in similar_by_history %}
+                        <div class="col">
+                            <div class="card h-100">
+                                <img src="{{ song.genius_image }}" class="card-img-top" alt="{{ song.name }}">
+                                <div class="card-body">
+                                    <h6 class="card-title">{{ song.name }}</h6>
+                                    <p class="card-text text-muted">{{ song.artist.name }}</p>
+                                    <a href="/song/{{ song.song_id }}?title={{ song.name }}&artist={{ song.artist.name }}" class="btn btn-sm btn-outline-secondary">Try it</a>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endif %}
 {% endblock %}

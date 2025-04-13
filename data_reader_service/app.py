@@ -32,9 +32,9 @@ def job_history(job_id):
                 job_data.get('vocals_status')
             ]
 
-            if all(s == "completed" for s in statuses):
+            if all(s == "Completed" for s in statuses):
                 overall_status = "complete"
-            elif any(s == "failed" for s in statuses):
+            elif any(s == "Failed" for s in statuses):
                 overall_status = "failed"
             else:
                 overall_status = "inProcess"
