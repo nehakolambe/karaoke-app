@@ -146,11 +146,28 @@ function highlightLine(index) {
     document.querySelectorAll(".highlight").forEach(el => el.classList.remove("highlight"));
 
     const lineEl = document.getElementById(`line-${index}`);
-    if (lineEl) {
+    const lyricsContainer = document.getElementById('lyrics-container');
+
+    if (lineEl && lyricsContainer) {
         lineEl.classList.add("highlight");
-        lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Check if line is out of visible container viewport
+        const containerTop = lyricsContainer.scrollTop;
+        const containerBottom = containerTop + lyricsContainer.clientHeight;
+
+        const lineOffsetTop = lineEl.offsetTop;
+        const lineOffsetBottom = lineOffsetTop + lineEl.offsetHeight;
+
+        if (lineOffsetTop < containerTop || lineOffsetBottom > containerBottom) {
+            // Only scroll the lyrics container, not the whole page
+            lyricsContainer.scrollTo({
+                top: lineOffsetTop - lyricsContainer.clientHeight / 2,
+                behavior: 'smooth'
+            });
+        }
     }
 }
+
 
 audio.ontimeupdate = () => {
     const t = audio.currentTime;
