@@ -78,9 +78,7 @@ def home():
         return render_template('home.html', history_songs=[], similar_by_history=[])
 
     user_email = session["email"]
-    print(user_email)
     user_doc = db.collection("users").document(user_email).get()
-    print(user_doc)
 
     history_songs = []
     similar_by_history = []

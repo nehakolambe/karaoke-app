@@ -111,6 +111,13 @@ const fullscreenBtn = document.getElementById('fullscreen');
 const lyricsDiv = document.getElementById('lyrics-container');
 const lyricsBox = document.getElementById('lyrics-box');
 const lyricsUrl = lyricsDiv.dataset.json;
+const timeDisplay = document.getElementById('time-display');
+
+function formatTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 let lyrics = [];
 let currentLineIndex = -1;
@@ -149,6 +156,10 @@ audio.ontimeupdate = () => {
     const t = audio.currentTime;
     seekbar.value = t;
 
+    if (!isNaN(audio.duration)) {
+        timeDisplay.textContent = `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
+    }    
+
     for (let i = 0; i < lyrics.length; i++) {
         if (t >= lyrics[i].start && t <= lyrics[i].end) {
             if (currentLineIndex !== i) {
@@ -162,6 +173,7 @@ audio.ontimeupdate = () => {
 
 audio.onloadedmetadata = () => {
     seekbar.max = audio.duration;
+    timeDisplay.textContent = `0:00 / ${formatTime(audio.duration)}`;
 };
 
 seekbar.oninput = () => {
