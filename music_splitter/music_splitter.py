@@ -2,6 +2,7 @@ import datetime
 import json
 import os
 import shutil
+import threading
 import traceback
 
 import pika
@@ -52,6 +53,14 @@ def publish_to_lyrics_syncer_queue(ch, job_id, song_id, song_name, artist_name):
     print(f"Published to lyrics syncer queue for job_id: {job_id}, song_id: {song_id}")
 
 # Core functionality
+def upload_file_safe(url, local_path, label, errors):
+    try:
+        print(f"Uploading {label} to: {url}")
+        gcs_utils.upload_file_to_gcs(url, local_path)
+    except Exception as e:
+        print(f"Failed to upload {label}: {e}")
+        errors[label] = str(e)
+
 def split_and_upload_instrumental(job_id: str, song_id: str):
     print(f"Processing song ID: {song_id}")
 
@@ -90,12 +99,35 @@ def split_and_upload_instrumental(job_id: str, song_id: str):
     print("Saving vocals.wav locally...")
     audio_loader.save(vocal_wav_path, vocals, sample_rate=sample_rate)
 
-    # Upload to GCS
-    print(f"Uploading instrumental to: {instrumental_url}")
-    gcs_utils.upload_file_to_gcs(instrumental_url, instrumental_wav_path)
+    # Upload to GCS parallel using threads
+    errors = {}
+    threads = [
+        threading.Thread(
+            target=upload_file_safe,
+            args=(
+                instrumental_url,
+                instrumental_wav_path,
+                "instrumental",
+                errors
+            )
+        ),
+        threading.Thread(
+            target=upload_file_safe,
+             args=(
+                 vocals_url,
+                 vocal_wav_path,
+                 "vocals",
+                 errors)
+        )
+    ]
 
-    print(f"Uploading vocals to: {vocals_url}")
-    gcs_utils.upload_file_to_gcs(vocals_url, vocal_wav_path)
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    if errors:
+        raise RuntimeError(f"Failed to upload: {', '.join(errors.keys())} — {errors}")
 
     shutil.rmtree(working_dir)
     print(f"Done processing {song_id}")
