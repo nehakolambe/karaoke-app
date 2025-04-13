@@ -5,7 +5,6 @@ import traceback
 import yt_dlp
 import pika
 
-from frontend.app_main import EVENT_TRACKER_QUEUE_NAME
 from shared.gcs_utils import upload_file_to_gcs, gcs_file_exists, get_instrumental_url, get_vocals_url  # Fixed import
 from shared import constants
 
@@ -16,6 +15,7 @@ RABBITMQ_HOST = constants.RABBITMQ_HOST
 DOWNLOAD_QUEUE_NAME = constants.DOWNLOAD_QUEUE_NAME
 MUSIC_SPLITTER_QUEUE_NAME = constants.SPLIT_QUEUE_NAME
 BUCKET_NAME = constants.GCS_BUCKET_NAME
+EVENT_TRACKER_QUEUE_NAME = constants.EVENT_TRACKER_QUEUE_NAME
 
 # Queue functions
 def notify_event_tracker(ch, status, job_id="", song_id="", error_message=None):
@@ -56,7 +56,7 @@ def publish_to_music_splitter_queue(ch, job_id, song_id, song_name, artist_name)
 def download_song_to_gcs(song_id, song_name, artist_name):
     print(f"Downloading: {song_name} by {artist_name} (ID: {song_id})")
 
-    query = f"{song_name} {artist_name}"
+    query = f"{song_name} {artist_name} audio"
     local_wav_path = os.path.join(DOWNLOAD_FOLDER, f"{song_id}.wav")
     gcs_path = f"songs/{song_id}/original.wav"
 

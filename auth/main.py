@@ -8,6 +8,7 @@ import os
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from google.cloud import firestore
+import uuid
 
 load_dotenv()
 
@@ -95,7 +96,7 @@ async def auth_callback(request: Request):
     if not user_snapshot.exists:
         print("[INFO] New user. Creating Firestore document.")
         user_doc.set({
-            "user_id": f"user_{user_email.split('@')[0]}",
+            "user_id": str(uuid.uuid4()),
             "email": user_email,
             "name": user_name,
             "created_at": datetime.utcnow().isoformat() + "Z",

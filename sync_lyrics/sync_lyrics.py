@@ -2,13 +2,13 @@ import datetime
 import json
 import os
 import traceback
+import re
 
 import requests
 from bs4 import BeautifulSoup
 import pika
 from forcealign import ForceAlign
 
-from music_downloader.music_downloader import MUSIC_SPLITTER_QUEUE_NAME
 from shared import gcs_utils
 from shared import constants
 
@@ -37,48 +37,112 @@ def notify_event_tracker(ch, status, job_id="", song_id="", error_message=None):
     )
     print(f"[EventTracker] Notified event tracker about lyrics syncing status for job: {job_id}")
 
+def build_azlyrics_url(artist, title):
+    """Build a URL to AZLyrics using only the main artist."""
+    artist = re.split(r'\s*(?:ft\.?|feat\.?|featuring|&|,|/|\+|x)\s*', artist, flags=re.IGNORECASE)[0]
+
+    def clean(string):
+        return re.sub(r'[^a-z0-9]', '', string.lower())
+
+    artist = clean(artist)
+    title = clean(title)
+    return f"https://www.azlyrics.com/lyrics/{artist}/{title}.html"
+
+def scrape_azlyrics(url):
+    """Scrape and clean lyrics from AZLyrics page."""
+    headers = {"User-Agent": "Mozilla/5.0"}
+    res = requests.get(url, headers=headers)
+
+    if res.status_code != 200:
+        raise Exception(f"Failed to fetch AZLyrics page: {res.status_code}")
+
+    soup = BeautifulSoup(res.text, "html.parser")
+    divs = soup.find_all("div", attrs={"class": None, "id": None})
+
+    for div in divs:
+        if div.text.strip():
+            raw_lyrics = div.text.strip()
+            lines = raw_lyrics.splitlines()
+
+            cleaned_lines = []
+            for line in lines:
+                stripped = line.strip()
+
+                # Skip lines starting with [Explicit:]
+                if stripped.startswith("[Explicit:]"):
+                    continue
+
+                # Remove [Clean and radio:] or similar
+                stripped = re.sub(r"^\[\s*clean[^\]]*\]\s*:? ?", "", stripped, flags=re.IGNORECASE)
+
+                cleaned_lines.append(stripped)
+
+            return "\n".join(cleaned_lines)
+
+    raise Exception("AZLyrics: No valid lyrics div found.")
+
+def get_lyrics_from_azlyrics(artist, title):
+    try:
+        az_url = build_azlyrics_url(artist, title)
+        print(f"[AZLyrics Scraper] Trying AZLyrics: {az_url}")
+        lyrics = scrape_azlyrics(az_url)
+        return lyrics
+    except Exception as e:
+        print(f"[AZLyrics Scraper] Failed for {artist} - {title}: {e}")
+        return None
+
 # Core functionality
-def get_genius_url(song_id: str) -> str:
+def get_genius_url(song_id):
     return f"https://genius.com/songs/{song_id}"
 
 
-def download_and_store_lyrics(song_id: str) -> bool:
-    print(f"[Lyrics Scraper] Fetching lyrics for Genius song ID: {song_id}")
-    genius_url = get_genius_url(song_id)
+def download_and_store_lyrics(song_id, song_name, artist_name):
+    print(f"[Lyrics Scraper] Attempting AZLyrics for: {artist_name} - {song_name}")
+    lyrics_text = get_lyrics_from_azlyrics(artist_name, song_name)
 
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    if not lyrics_text:
+        print(f"[Lyrics Scraper] Falling back to Genius for: {song_id}")
+        genius_url = get_genius_url(song_id)
 
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+
+        try:
+            response = requests.get(genius_url, headers=headers)
+            if response.status_code != 200:
+                print(f"[Lyrics Scraper] Failed to fetch Genius page for {song_id}")
+                return False
+
+            soup = BeautifulSoup(response.text, "html.parser")
+            lyrics_divs = soup.find_all("div", {"data-lyrics-container": "true"})
+            if not lyrics_divs:
+                print(f"[Lyrics Scraper] No lyrics container found for {song_id}")
+                return False
+
+            lyrics = []
+            for div in lyrics_divs:
+                for elem in div.children:
+                    if elem.name == "a":
+                        text = elem.get_text(separator="\n")
+                    elif elem.name is None:
+                        text = str(elem).strip()
+                    else:
+                        continue
+
+                    if text.startswith("[") and text.endswith("]"):
+                        continue
+
+                    lyrics.append(text)
+
+            lyrics_text = "\n".join(filter(None, (line.strip() for line in lyrics)))
+        except Exception as e:
+            print(f"[Lyrics Scraper] Unexpected error while fetching Genius for {song_id}: {e}")
+            traceback.print_exc()
+            return False
+
+    # Save lyrics to disk and GCS
     try:
-        response = requests.get(genius_url, headers=headers)
-        if response.status_code != 200:
-            print(f"[Lyrics Scraper] Failed to fetch Genius page for {song_id}")
-            return False
-
-        soup = BeautifulSoup(response.text, "html.parser")
-        lyrics_divs = soup.find_all("div", {"data-lyrics-container": "true"})
-        if not lyrics_divs:
-            print(f"[Lyrics Scraper] No lyrics container found for {song_id}")
-            return False
-
-        lyrics = []
-        for div in lyrics_divs:
-            for elem in div.children:
-                if elem.name == "a":
-                    text = elem.get_text(separator="\n")
-                elif elem.name is None:
-                    text = str(elem).strip()
-                else:
-                    continue
-
-                if text.startswith("[") and text.endswith("]"):
-                    continue
-
-                lyrics.append(text)
-
-        lyrics_text = "\n".join(filter(None, (line.strip() for line in lyrics)))
-
         local_dir = os.path.join("downloads", song_id)
         os.makedirs(local_dir, exist_ok=True)
         local_path = os.path.join(local_dir, "lyrics.txt")
@@ -91,9 +155,8 @@ def download_and_store_lyrics(song_id: str) -> bool:
 
         print(f"[Lyrics Scraper] Uploaded lyrics.txt to {lyrics_gcs_path}")
         return True
-
     except Exception as e:
-        print(f"[Lyrics Scraper] Unexpected error while fetching for {song_id}: {e}")
+        print(f"[Lyrics Scraper] Failed to save lyrics for {song_id}: {e}")
         traceback.print_exc()
         return False
 
@@ -146,10 +209,14 @@ def align_lyrics(song_id: str):
                     start = aligned_word.time_start
                 end = aligned_word.time_end
                 w_idx += 1
+            # Shift both start and end backward by 0.2s, clamp to >= 0
+            shifted_start = max(0, start - 0.3)
+            shifted_end = max(0, end - 0.3)
+
             result.append({
                 "line": " ".join(line_words),
-                "start": start,
-                "end": end
+                "start": shifted_start,
+                "end": shifted_end
             })
 
         with open(local_output, "w") as f:
@@ -171,11 +238,13 @@ def callback(ch, method, properties, body):
         message = json.loads(body)
         job_id = message["job_id"]
         song_id = message["song_id"]
+        song_name = message["song_name"]
+        artist_name = message["artist_name"]
         print(f"[Lyrics Worker] Received message for song_id: {song_id}")
 
         try:
             # Step 1: Download lyrics. If it fails, skip alignment.
-            if not download_and_store_lyrics(song_id):
+            if not download_and_store_lyrics(song_id, song_name, artist_name):
                 print(f"[Lyrics Worker] Lyrics download failed for {song_id}, skipping.")
                 # Notify event tracker about failure.
                 notify_event_tracker(ch, "Failed", job_id, song_id,

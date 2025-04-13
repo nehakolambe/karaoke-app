@@ -47,11 +47,15 @@
                 <div class="dropdown-menu dropdown-menu-right" aria-labelledby="dropdownUser">
                     <span class="dropdown-item-text">Hi, {{ name or 'Guest' }}</span>
                     <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" href="/profile">Profile</a>
-                    <a class="dropdown-item" href="/history">History</a>
-                    <a class="dropdown-item text-danger" href="/logout">Logout</a>
+                    {% if email %}
+                        <a class="dropdown-item" href="/profile">Profile</a>
+                        <a class="dropdown-item" href="/history">History</a>
+                        <a class="dropdown-item text-danger" href="/logout">Logout</a>
+                    {% else %}
+                        <a class="dropdown-item text-success" href="http://127.0.0.1:8000/login">Login</a>
+                    {% endif %}
                 </div>
-            </div>            
+            </div>          
         </div>
     </nav>
     
