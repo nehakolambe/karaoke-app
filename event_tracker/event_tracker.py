@@ -120,7 +120,17 @@ def callback(ch, method, properties, body):
 
 # RabbitMQ setup
 def start_event_tracker():
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host=constants.RABBITMQ_HOST))
+    credentials = pika.PlainCredentials(constants.RABBITMQ_USER, constants.RABBITMQ_PASS)
+    connection = pika.BlockingConnection(pika.ConnectionParameters(
+        host=constants.RABBITMQ_HOST,
+        heartbeat=600,
+        blocked_connection_timeout=300,
+        connection_attempts=3,
+        retry_delay=5,
+        socket_timeout=600,
+        credentials=credentials
+    ))
+
     channel = connection.channel()
 
     queue_name = constants.EVENT_TRACKER_QUEUE_NAME
