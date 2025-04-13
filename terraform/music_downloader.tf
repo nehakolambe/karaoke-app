@@ -1,10 +1,10 @@
-resource "kubernetes_deployment" "music_splitter" {
+resource "kubernetes_deployment" "music_downloader" {
   depends_on = [helm_release.rabbitmq]
 
   metadata {
-    name = "music-splitter"
+    name = "music-downloader"
     labels = {
-      app = "music-splitter"
+      app = "music-downloader"
     }
   }
 
@@ -13,19 +13,18 @@ resource "kubernetes_deployment" "music_splitter" {
 
     selector {
       match_labels = {
-        app = "music-splitter"
+        app = "music-downloader"
       }
     }
 
     template {
       metadata {
         labels = {
-          app = "music-splitter"
+          app = "music-downloader"
         }
       }
 
       spec {
-        # Useful to let minikube pull from Google artifact registry.
         dynamic "image_pull_secrets" {
           for_each = var.use_image_pull_secret ? [1] : []
           content {
@@ -34,10 +33,9 @@ resource "kubernetes_deployment" "music_splitter" {
         }
 
         container {
-          name  = "music-splitter"
-          #image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/music-splitter:latest"
-          image = "pratikbhirud/music-splitter:latest"
-
+          name  = "music-downloader"
+          # image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/music-downloader:latest"
+          image = "suyog005/music-downloader:latest"
 
           port {
             container_port = 8080
@@ -53,16 +51,16 @@ resource "kubernetes_deployment" "music_splitter" {
   }
 }
 
-resource "kubernetes_service" "music_splitter" {
+resource "kubernetes_service" "music_downloader" {
   depends_on = [helm_release.rabbitmq]
 
   metadata {
-    name = "music-splitter"
+    name = "music-downloader"
   }
 
   spec {
     selector = {
-      app = "music-splitter"
+      app = "music-downloader"
     }
 
     port {
@@ -73,4 +71,3 @@ resource "kubernetes_service" "music_splitter" {
     type = "ClusterIP"
   }
 }
-
