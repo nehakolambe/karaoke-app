@@ -39,7 +39,7 @@
     const songId = "{{ song }}";
 
     function pollJobStatus() {
-        fetch(`http://localhost:5002/job-history/${jobId}`)
+        fetch(`${DATA_READER_URL}/job-history/${jobId}`)
             .then(res => res.json())
             .then(data => {
                 if (data.status === "complete") {

@@ -1,18 +1,27 @@
-# Use official Python image
-FROM python:3.13
+FROM python:3.9-slim
 
-# Set working directory in the container
-WORKDIR /app
+# Install system dependencies including SoX
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sox \
+    libsox-dev \
+    libsox-fmt-all \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Set working directory
+WORKDIR /app/frontend
 
-# Copy the rest of the application code
-COPY . .
+# Copy app code
+COPY frontend /app/frontend
+COPY shared /app/shared
 
-# Expose the port Flask runs on
-EXPOSE 5000
+ENV PYTHONPATH=/app
 
-# Command to run the application
-CMD ["python", "app.py"]
+# Install base pip packages needed for setup-time dependencies
+RUN pip install --upgrade pip
+RUN pip install numpy typing_extensions
+
+# Install all other dependencies
+RUN pip install --no-cache-dir -r /app/frontend/requirements.txt
+
+# Run your app
+CMD ["python", "app_main.py"]

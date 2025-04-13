@@ -2,7 +2,7 @@ import requests
 from flask import Flask, render_template, request, jsonify, Response, session, redirect, url_for
 import re
 import datetime
-from google.cloud import storage, firestore
+from google.cloud import storage
 from google.oauth2 import service_account
 from dotenv import load_dotenv
 import os
@@ -13,7 +13,6 @@ from shared import constants
 
 app = Flask(__name__)
 load_dotenv()
-db = firestore.Client()
 
 # ---------- CONFIGURATION ----------
 LASTFM_API_KEY = os.getenv("LASTFM_API_KEY")
@@ -25,6 +24,8 @@ RABBITMQ_HOST = constants.RABBITMQ_HOST
 BUCKET_NAME = constants.GCS_BUCKET_NAME
 DOWNLOAD_QUEUE_NAME = constants.DOWNLOAD_QUEUE_NAME
 EVENT_TRACKER_QUEUE_NAME = constants.EVENT_TRACKER_QUEUE_NAME
+DATA_READER_URL = constants.DATA_READER_URL
+AUTH_URL = constants.AUTH_URL
 
 @app.route('/set_user')
 def set_user():
@@ -46,7 +47,7 @@ def inject_user():
     return {
         "name": session.get("name", "Guest"),
         "email": session.get("email"),
-        "picture": session.get("picture")
+        "picture": session.get("picture"),
     }
 
 def generate_signed_url(bucket_name, blob_name, expiration_minutes=10):
@@ -76,15 +77,16 @@ def get_title_artist_from_genius(song_id):
 def home():
     if "email" not in session:
         return render_template('home.html', history_songs=[], similar_by_history=[])
-
+    
     user_email = session["email"]
-    user_doc = db.collection("users").document(user_email).get()
+    user_doc = requests.get(f"{DATA_READER_URL}/users/{user_email}").json()
 
     history_songs = []
     similar_by_history = []
 
-    if user_doc.exists:
-        song_ids = user_doc.to_dict().get("downloaded_songs", [])[-8:]  # show recent 8
+    if user_doc.get("email"):
+        song_ids = user_doc.get("downloaded_songs", [])[-8:]
+        print(song_ids)
         for song_id in song_ids:
             # Get song title/artist from Genius
             title, artist = get_title_artist_from_genius(song_id)
@@ -118,7 +120,7 @@ def history():
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect("http://127.0.0.1:8000/")
+    return redirect({AUTH_URL})
 
 @app.route('/error')
 def error_page():

@@ -96,7 +96,6 @@ async def auth_callback(request: Request):
     if not user_snapshot.exists:
         print("[INFO] New user. Creating Firestore document.")
         user_doc.set({
-            "user_id": str(uuid.uuid4()),
             "email": user_email,
             "name": user_name,
             "created_at": datetime.utcnow().isoformat() + "Z",
