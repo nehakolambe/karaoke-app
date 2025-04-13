@@ -50,19 +50,18 @@ def job_history(job_id):
         logger.error(f"Error fetching job history: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/users/<user_id>', methods=['GET'])
-def get_user(user_id):
+@app.route('/users/<user_email>', methods=['GET'])
+def get_user(user_email):
     try:
-        user_ref = firestore_client.collection('users').document(user_id)
+        user_ref = firestore_client.collection('users').document(user_email)
         user = user_ref.get()
 
         if user.exists:
             user_data = user.to_dict()
             return jsonify({
-                "user_id": user_id,
                 "name": user_data.get('name'),
                 "email": user_data.get('email'),
-                "last_login": user_data.get('last_login')
+                "downloaded_songs": user_data.get('downloaded_songs')
             })
         else:
             return jsonify({"error": "User not found"}), 404
