@@ -18,6 +18,7 @@
                             <i class="bi bi-play-fill"></i>
                         </button>
                         <input id="seekbar" type="range" value="0" min="0" step="0.01">
+                        <span id="time-display" class="ms-2">0:00 / 0:00</span>
                         <button id="fullscreen" class="btn btn-outline-secondary" title="Fullscreen Lyrics">
                             <i class="bi bi-arrows-fullscreen"></i>
                         </button>
@@ -49,7 +50,7 @@
                         <form action="{{ url_for('start_processing') }}" method="post" class="w-100">
                             <input type="hidden" name="title" value="{{ s.name }}">
                             <input type="hidden" name="artist" value="{{ s.artist.name }}">
-                            <input type="hidden" name="song_id" value="{{ s.song_id }}"> <!-- You can replace this if you have a valid ID -->
+                            <input type="hidden" name="song_id" value="{{ s.song_id }}">
                             <button type="submit" class="btn btn-sm btn-outline-primary w-100">Play Song</button>
                         </form>                        
                     </div>
