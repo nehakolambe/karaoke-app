@@ -7,7 +7,8 @@ WORKDIR /app
 # Copy the current directory contents into the container
 COPY . /app
 
-COPY service-account.json /app/service-account.json
+
+#COPY service-account.json /app/service-account.json
 
 
 # Install dependencies

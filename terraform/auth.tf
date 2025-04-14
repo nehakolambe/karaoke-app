@@ -24,17 +24,23 @@ resource "kubernetes_deployment" "auth" {
 
       spec {
         container {
-          image = "srsa1520/auth-service:latest" # Replace if using remote image or use `minikube image load`
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/auth-service:latest" # Replace if using remote image or use `minikube image load`
           name  = "auth-service"
 
           port {
-            container_port = 8080
+            container_port = 8000
           }
 
           env {
             name = "GOOGLE_CLIENT_ID"
-            value = "102057894489695516768" # Replace with real or use secret
+            value = "102057894489695516768"
           }
+
+          env {
+            name  = "FRONTEND_URL"
+            value = "http://34.134.220.179"
+          }
+
         }
       }
     }
@@ -48,12 +54,12 @@ resource "kubernetes_service" "auth_service" {
 
   spec {
     selector = {
-      app = "auth"  # Match label in your deployment
+      app = "auth"
     }
 
     port {
-      port        = 8000         # Exposed service port
-      target_port = 8000      # Must match container_port in Deployment
+      port        = 8000
+      target_port = 8000
     }
 
     type = "LoadBalancer"

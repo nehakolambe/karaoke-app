@@ -1,4 +1,4 @@
-resource "kubernetes_deployment" "music_downloader" {
+resource "kubernetes_deployment" "music-downloader" {
   depends_on = [helm_release.rabbitmq]
 
   metadata {
@@ -34,8 +34,8 @@ resource "kubernetes_deployment" "music_downloader" {
 
         container {
           name  = "music-downloader"
-          # image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/music-downloader:latest"
-          image = "suyog005/music-downloader:latest"
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/music_downloader:latest"
+          # image = "suyog005/music_downloader:latest"
 
           port {
             container_port = 8080
@@ -45,13 +45,23 @@ resource "kubernetes_deployment" "music_downloader" {
             name  = "RABBITMQ_HOST"
             value = "rabbitmq.default.svc.cluster.local"
           }
+
+          env {
+            name = "RABBITMQ_USER"
+            value = "user"
+          }
+
+          env {
+            name = "RABBITMQ_PASS"
+            value = "password"
+          }
         }
       }
     }
   }
 }
 
-resource "kubernetes_service" "music_downloader" {
+resource "kubernetes_service" "music-downloader" {
   depends_on = [helm_release.rabbitmq]
 
   metadata {

@@ -37,9 +37,10 @@
     const title = "{{ title }}";
     const artist = "{{ artist }}";
     const songId = "{{ song }}";
+    const dataReaderUrl = "{{ data_reader_url }}";
 
     function pollJobStatus() {
-        fetch(`${DATA_READER_URL}/job-history/${jobId}`)
+        fetch(`/check_status/${jobId}`)
             .then(res => res.json())
             .then(data => {
                 if (data.status === "complete") {

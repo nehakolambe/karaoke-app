@@ -12,5 +12,5 @@ LYRICS_QUEUE_NAME = "lyrics-jobs"
 DOWNLOAD_QUEUE_NAME = "download-jobs"
 EVENT_TRACKER_QUEUE_NAME = "event-notifications"
 
-DATA_READER_URL = "http://127.0.0.1:5002"
-AUTH_URL = "http://127.0.0.1:8000/"
+DATA_READER_URL = os.getenv('DATA_READER_URL', 'http://127.0.0.1:5002')
+AUTH_URL = os.getenv('AUTH_URL', 'http://127.0.0.1:8000')
