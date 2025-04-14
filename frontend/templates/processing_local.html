@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Processing {{ title }}{% endblock %}
+
+{% block content %}
+<div class="text-center mt-5">
+    <h2 class="text-primary">🎵 {{ title }}</h2>
+    <p class="text-muted">by {{ artist }}</p>
+
+    <div class="loader my-4"></div>
+    <p class="text-secondary">We’re preparing your karaoke track. Hang tight!</p>
+</div>
+
+<style>
+    .loader {
+        border: 8px solid #f3f3f3;
+        border-top: 8px solid var(--primary, #007bff);
+        border-radius: 50%;
+        width: 60px;
+        height: 60px;
+        animation: spin 1s linear infinite;
+        margin: 30px auto;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .job-id {
+        font-size: 0.9rem;
+    }
+</style>
+<script>
+    const jobId = "{{ job_id }}";
+    const title = "{{ title }}";
+    const artist = "{{ artist }}";
+    const songId = "{{ song }}";
+    const frontendCheckUrl = "{{ frontend_check_url }}";
+
+    function pollJobStatus() {
+        fetch(frontendCheckUrl)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === "complete") {
+                    window.location.href = `/song/${songId}?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`;
+                } else if (data.status === "failed") {
+                    window.location.href = "/error";
+                } else {
+                    setTimeout(pollJobStatus, 3000);
+                }
+            })
+            .catch(err => {
+                console.error("Polling error:", err);
+                setTimeout(pollJobStatus, 5000);
+            });
+    }
+
+    pollJobStatus();
+</script>
+{% endblock %}

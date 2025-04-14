@@ -17,7 +17,7 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 SECRET_KEY = os.getenv("SECRET_KEY")
 BUCKET_NAME = os.getenv("PROJECT_NAME")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:5001")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:5002")
 
 # ---------- FASTAPI SETUP ----------
 app = FastAPI()
