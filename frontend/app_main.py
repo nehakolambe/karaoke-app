@@ -26,6 +26,7 @@ DOWNLOAD_QUEUE_NAME = constants.DOWNLOAD_QUEUE_NAME
 EVENT_TRACKER_QUEUE_NAME = constants.EVENT_TRACKER_QUEUE_NAME
 DATA_READER_URL = constants.DATA_READER_URL
 AUTH_URL = constants.AUTH_URL
+SPLIT_QUEUE_NAME = constants.SPLIT_QUEUE_NAME
 
 # ---------- RABBITMQ CONNECTION SETUP ----------
 credentials = pika.PlainCredentials(constants.RABBITMQ_USER, constants.RABBITMQ_PASS)
@@ -91,6 +92,15 @@ def get_title_artist_from_genius(song_id):
         return song.get("title"), song.get("primary_artist", {}).get("name")
     return None, None
 
+@app.route('/api/user-history/<email>')
+def user_history(email):
+    user_doc = requests.get(f"{DATA_READER_URL}/users/{email}").json()
+
+    song_ids = []
+    if user_doc.get("email"):
+        song_ids = user_doc.get("downloaded_songs", [])[-8:]
+
+    return jsonify({"downloaded_song_ids": song_ids})
 
 @app.route('/')
 def home():
@@ -320,13 +330,20 @@ def start_processing():
         "source": "frontend",
     }
 
-    download_message = {
+    # download_message = {
+    #     "job_id": job_id,
+    #     "song_id": str(song_id),
+    #     "title": title,
+    #     "artist": artist
+    # }
+    # print("[Queueing Job]", download_message)
+    splitter_message = {
         "job_id": job_id,
         "song_id": str(song_id),
         "title": title,
         "artist": artist
     }
-    print("[Queueing Job]", download_message)
+    print("[Queueing Job]", splitter_message)
 
     try:
         # Notify the event tracker about the new job.
@@ -337,54 +354,91 @@ def start_processing():
             properties=pika.BasicProperties()
         )
 
-        # TODO: Remove durability
+        # # TODO: Remove durability
+        # channel.basic_publish(
+        #     exchange='',
+        #     routing_key=DOWNLOAD_QUEUE_NAME,
+        #     body=json.dumps(download_message),
+        #     properties=pika.BasicProperties(delivery_mode=2)
+        # )
         channel.basic_publish(
             exchange='',
-            routing_key=DOWNLOAD_QUEUE_NAME,
-            body=json.dumps(download_message),
+            routing_key=SPLIT_QUEUE_NAME,
+            body=json.dumps(splitter_message),
             properties=pika.BasicProperties(delivery_mode=2)
         )
-
-        # TODO: Cleanup?
-        # Store metadata in job_status_store immediately
+        return job_id
+    
     except Exception as e:
         print("Error queuing task:", e)
         return jsonify({"error": "Failed to queue task", "details": str(e)}), 500
 
-    if request.is_json:
-        return jsonify({
-            "job_id": job_id,
-            "song_id": song_id,
-            "redirect_url": f"/processing/{job_id}?title={title}&artist={artist}&song={song_id}"
-        }), 200
-    else:
-        return redirect(url_for('processing_page', job_id=job_id, title=title, artist=artist, song=song_id))
+    # if request.is_json:
+    #     return jsonify({
+    #         "job_id": job_id,
+    #         "song_id": song_id,
+    #         "redirect_url": f"/processing/{job_id}?title={title}&artist={artist}&song={song_id}"
+    #     }), 200
+    # else:
+    #     return redirect(url_for('processing_page', job_id=job_id, title=title, artist=artist, song=song_id))
 
-@app.route('/processing/<job_id>')
-def processing_page(job_id):
-    title = request.args.get("title", "Loading...")
-    artist = request.args.get("artist", "Please wait")
-    song = request.args.get("song", "Please wait")
-    print(f"[processing_page] job_id={job_id}, title={title}, artist={artist}, song={song}")
-    return render_template('processing.html', job_id=job_id, title=title, artist=artist, song=song, data_reader_url=DATA_READER_URL)
+# @app.route('/processing/<job_id>')
+# def processing_page(job_id):
+#     title = request.args.get("title", "Loading...")
+#     artist = request.args.get("artist", "Please wait")
+#     song = request.args.get("song", "Please wait")
+#     print(f"[processing_page] job_id={job_id}, title={title}, artist={artist}, song={song}")
+#     return render_template('processing.html', job_id=job_id, title=title, artist=artist, song=song, data_reader_url=DATA_READER_URL)
 
-job_status_store = {}
+# job_status_store = {}
 
-@app.route('/mark_complete/<job_id>/<song_id>', methods=['POST'])
-def mark_complete(job_id, song_id):
-    job = job_status_store.get(job_id)
-    if not job:
-        return jsonify({"error": "Job ID not found"}), 404
+# @app.route('/mark_complete/<job_id>/<song_id>', methods=['POST'])
+# def mark_complete(job_id, song_id):
+#     job = job_status_store.get(job_id)
+#     if not job:
+#         return jsonify({"error": "Job ID not found"}), 404
 
-    job["status"] = "done"
-    print(f"Job {job_id} is now being processed.")
-    return jsonify({"message": f"Job {job_id} marked as complete for song {song_id}."})
+#     job["status"] = "done"
+#     print(f"Job {job_id} is now being processed.")
+#     return jsonify({"message": f"Job {job_id} marked as complete for song {song_id}."})
 
 @app.route('/check_status/<job_id>')
 def check_status(job_id):
     print(f"[check_status] Proxying to data-reader for job_id: {job_id}")
     try:
         resp = requests.get(f"{DATA_READER_URL}/job-history/{job_id}", timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+
+            # Log to event tracker only if status is complete
+            if data.get("status") == "complete":
+                user_email = session.get("email")
+                if user_email:
+                    try:
+                        connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
+                        channel = connection.channel()
+                        channel.queue_declare(queue=EVENT_TRACKER_QUEUE_NAME)
+
+                        history_message = {
+                            "song_id": str(data["song_id"]),
+                            "timestamp": str(datetime.datetime.now(datetime.timezone.utc).isoformat()),
+                            "source": "history",
+                            "user_email": user_email
+                        }
+
+                        channel.basic_publish(
+                            exchange="",
+                            routing_key=EVENT_TRACKER_QUEUE_NAME,
+                            body=json.dumps(history_message),
+                            properties=pika.BasicProperties()
+                        )
+                        connection.close()
+                        print(f"[check_status] Logged song view for {user_email} - {data['song_id']}")
+                    except Exception as e:
+                        print(f"[check_status] Error sending play event to event tracker: {e}")
+            return data.get("status")
+        else:
+            print(f"[check_status] Non-200 response from data-reader: {resp.status_code}")
         return Response(resp.content, status=resp.status_code, content_type=resp.headers.get('Content-Type'))
     except Exception as e:
         print(f"[check_status] Error fetching status: {e}")
