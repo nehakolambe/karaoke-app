@@ -35,8 +35,8 @@ resource "kubernetes_deployment" "music_splitter" {
 
         container {
           name  = "music-splitter"
-          #image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/music-splitter:latest"
-          image = "pratikbhirud/music-splitter:latest"
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/music-splitter:latest"
+          # image = "pratikbhirud/music-splitter:latest"
 
 
           port {
@@ -46,6 +46,16 @@ resource "kubernetes_deployment" "music_splitter" {
           env {
             name  = "RABBITMQ_HOST"
             value = "rabbitmq.default.svc.cluster.local"
+          }
+
+          env {
+            name = "RABBITMQ_USER"
+            value = "user"
+          }
+
+          env {
+            name = "RABBITMQ_PASS"
+            value = "password"
           }
         }
       }

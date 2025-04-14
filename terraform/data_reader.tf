@@ -25,7 +25,7 @@ resource "kubernetes_deployment" "data_reader" {
       spec {
         container {
           name  = "data-reader"
-          image = "srsa1520/data-reader-service:latest"
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/data-reader-service:latest"
 
           port {
             container_port = 5002
@@ -70,6 +70,6 @@ resource "kubernetes_service" "data_reader" {
       target_port = 5002
     }
 
-    type = "LoadBalancer"
+    type = "ClusterIP"
   }
 }

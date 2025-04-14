@@ -17,6 +17,7 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 SECRET_KEY = os.getenv("SECRET_KEY")
 BUCKET_NAME = os.getenv("PROJECT_NAME")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:5001")
 
 # ---------- FASTAPI SETUP ----------
 app = FastAPI()
@@ -108,7 +109,7 @@ async def auth_callback(request: Request):
     request.session["user"] = {"email": user_email, "name": user_name, "picture": user_picture}
     print("[INFO] Session updated")
 
-    return RedirectResponse(f"http://127.0.0.1:5001/set_user?name={user_name}&email={user_email}&picture={user_picture}")
+    return RedirectResponse(f"{FRONTEND_URL}/set_user?name={user_name}&email={user_email}&picture={user_picture}")
 
 
 # ---------- LOGOUT ----------
@@ -116,7 +117,7 @@ async def auth_callback(request: Request):
 async def logout(request: Request):
     print(f"[INFO] User logged out: {request.session.get('user', {}).get('email', 'Unknown')}")
     request.session.clear()
-    return RedirectResponse(url="http://127.0.0.1:5001/")
+    return RedirectResponse(url=f"http://{FRONTEND_URL}/")
 
 # ---------- FIRESTORE TEST ----------
 @app.get("/firestore-test")

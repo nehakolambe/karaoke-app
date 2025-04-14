@@ -34,8 +34,8 @@ resource "kubernetes_deployment" "sync_lyrics" {
 
         container {
           name  = "sync-lyrics"
-          # image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/sync-lyrics:latest"
-          image = "nehakolambe15/sync-lyrics:latest"
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/sync_lyrics:latest"
+          # image = "nehakolambe15/sync-lyrics:latest"
 
           port {
             container_port = 8080
@@ -54,6 +54,24 @@ resource "kubernetes_deployment" "sync_lyrics" {
           env {
             name = "RABBITMQ_PASS"
             value = "password"
+          }
+
+          env {
+            name  = "GOOGLE_APPLICATION_CREDENTIALS"
+            value = "/secrets/service-account.json"
+          }
+
+          volume_mount {
+            name       = "gcp-creds"
+            mount_path = "/secrets"
+            read_only  = true
+          }
+        }
+
+        volume {
+          name = "gcp-creds"
+          secret {
+            secret_name = "firestore-key"
           }
         }
       }

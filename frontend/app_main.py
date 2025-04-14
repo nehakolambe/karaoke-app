@@ -27,6 +27,25 @@ EVENT_TRACKER_QUEUE_NAME = constants.EVENT_TRACKER_QUEUE_NAME
 DATA_READER_URL = constants.DATA_READER_URL
 AUTH_URL = constants.AUTH_URL
 
+# ---------- RABBITMQ CONNECTION SETUP ----------
+credentials = pika.PlainCredentials(constants.RABBITMQ_USER, constants.RABBITMQ_PASS)
+connection = pika.BlockingConnection(pika.ConnectionParameters(
+    host=RABBITMQ_HOST,
+    heartbeat=600,
+    blocked_connection_timeout=300,
+    connection_attempts=3,
+    retry_delay=5,
+    socket_timeout=600,
+    credentials=credentials
+))
+
+channel = connection.channel()
+
+# Declare queues once during startup
+channel.queue_declare(queue=EVENT_TRACKER_QUEUE_NAME)
+channel.queue_declare(queue=DOWNLOAD_QUEUE_NAME, durable=True)
+
+
 @app.route('/set_user')
 def set_user():
     name = request.args.get('name')
@@ -252,10 +271,6 @@ def song_page(song_id):
     user_email = session.get("email")
     if user_email:
         try:
-            connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
-            channel = connection.channel()
-            channel.queue_declare(queue=EVENT_TRACKER_QUEUE_NAME)
-
             history_message = {
                 "song_id": str(song_id),
                 "timestamp": str(datetime.datetime.now(datetime.timezone.utc).isoformat()),
@@ -269,7 +284,6 @@ def song_page(song_id):
                 body=json.dumps(history_message),
                 properties=pika.BasicProperties()
             )
-            connection.close()
             print(f"[song_page] Logged song view for {user_email} - {song_id}")
         except Exception as e:
             print(f"Error sending play event to event tracker: {e}")
@@ -315,11 +329,7 @@ def start_processing():
     print("[Queueing Job]", download_message)
 
     try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
-        channel = connection.channel()
-
         # Notify the event tracker about the new job.
-        channel.queue_declare(queue=EVENT_TRACKER_QUEUE_NAME)
         channel.basic_publish(
             exchange="",
             routing_key=EVENT_TRACKER_QUEUE_NAME,
@@ -328,7 +338,6 @@ def start_processing():
         )
 
         # TODO: Remove durability
-        channel.queue_declare(queue=DOWNLOAD_QUEUE_NAME, durable=True)
         channel.basic_publish(
             exchange='',
             routing_key=DOWNLOAD_QUEUE_NAME,
@@ -338,13 +347,6 @@ def start_processing():
 
         # TODO: Cleanup?
         # Store metadata in job_status_store immediately
-        job_status_store[job_id] = {
-            "status": "pending",
-            "song_id": str(song_id),
-            "title": title,
-            "artist": artist
-        }
-
     except Exception as e:
         print("Error queuing task:", e)
         return jsonify({"error": "Failed to queue task", "details": str(e)}), 500
@@ -364,7 +366,7 @@ def processing_page(job_id):
     artist = request.args.get("artist", "Please wait")
     song = request.args.get("song", "Please wait")
     print(f"[processing_page] job_id={job_id}, title={title}, artist={artist}, song={song}")
-    return render_template('processing.html', job_id=job_id, title=title, artist=artist, song=song)
+    return render_template('processing.html', job_id=job_id, title=title, artist=artist, song=song, data_reader_url=DATA_READER_URL)
 
 job_status_store = {}
 
@@ -380,18 +382,13 @@ def mark_complete(job_id, song_id):
 
 @app.route('/check_status/<job_id>')
 def check_status(job_id):
-    print(f"Checking status for job: {job_id}")
-    print("Current store:", job_status_store)
-    status = job_status_store.get(job_id)
-    if not status:
-        return jsonify({"status": "pending"}), 202
-
-    return jsonify({
-        "status": status.get("status", "pending"),
-        "song_id": status["song_id"],
-        "title": status["title"],
-        "artist": status["artist"]
-    }), 200
+    print(f"[check_status] Proxying to data-reader for job_id: {job_id}")
+    try:
+        resp = requests.get(f"{DATA_READER_URL}/job-history/{job_id}", timeout=5)
+        return Response(resp.content, status=resp.status_code, content_type=resp.headers.get('Content-Type'))
+    except Exception as e:
+        print(f"[check_status] Error fetching status: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 if __name__ == '__main__':

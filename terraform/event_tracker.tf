@@ -35,7 +35,8 @@ resource "kubernetes_deployment" "event_tracker" {
 
         container {
           name  = "event-tracker"
-          image = "suyog005/event-tracker:latest"
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/event-tracker:latest"
+          # image = "suyog005/event-tracker:latest"
 
           env {
             name  = "RABBITMQ_HOST"
@@ -54,7 +55,7 @@ resource "kubernetes_deployment" "event_tracker" {
 
           env {
             name  = "GOOGLE_APPLICATION_CREDENTIALS"
-            value = "/secrets/key.json"
+            value = "/secrets/service-account.json"
           }
 
           port {
