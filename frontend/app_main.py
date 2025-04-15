@@ -340,7 +340,7 @@ def start_processing():
     splitter_message = {
         "job_id": job_id,
         "song_id": str(song_id),
-        "title": title,
+        "song_name": title,
         "artist": artist
     }
     print("[Queueing Job]", splitter_message)

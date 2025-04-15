@@ -13,8 +13,10 @@ from shared.gcs_utils import upload_file_to_gcs, gcs_file_exists
 import yt_dlp
 from shared import constants
 from urllib.parse import quote_plus
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 load_dotenv()
 
 # ---------- CONFIGURATION ----------
@@ -31,7 +33,7 @@ DATA_READER_URL = constants.DATA_READER_URL
 AUTH_URL = constants.AUTH_URL
 DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
-GKE_API_URL = "34.134.220.179"
+GKE_API_URL = "http://34.134.220.179:80"
 
 @app.route('/set_user')
 def set_user():
@@ -189,6 +191,81 @@ def search():
     print("Genius error:", response.status_code, response.text)
     return jsonify([])
 
+def build_azlyrics_url(artist, title):
+    artist = re.split(r'\s*(?:ft\.?|feat\.?|featuring|&|,|/|\+|x)\s*', artist, flags=re.IGNORECASE)[0]
+    def clean(string):
+        return re.sub(r'[^a-z0-9]', '', string.lower())
+    return f"https://www.azlyrics.com/lyrics/{clean(artist)}/{clean(title)}.html"
+
+def scrape_azlyrics(url):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    res = requests.get(url, headers=headers)
+    if res.status_code != 200:
+        raise Exception(f"Failed to fetch AZLyrics: {res.status_code}")
+    
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(res.text, "html.parser")
+    divs = soup.find_all("div", attrs={"class": None, "id": None})
+
+    for div in divs:
+        if div.text.strip():
+            lines = div.text.strip().splitlines()
+            cleaned_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith("[Explicit:]"):
+                    continue
+                stripped = re.sub(r"^\[\s*clean[^\]]*\]\s*:? ?", "", stripped, flags=re.IGNORECASE)
+                cleaned_lines.append(stripped)
+            return "\n".join(cleaned_lines)
+
+    raise Exception("No valid lyrics div found.")
+
+def download_lyrics_and_upload(song_id, title, artist):
+    print(f"[Lyrics] Attempting AZLyrics for: {artist} - {title}")
+    lyrics = None
+    try:
+        url = build_azlyrics_url(artist, title)
+        lyrics = scrape_azlyrics(url)
+        print(f"[Lyrics] Scraped from AZLyrics")
+    except Exception as e:
+        print(f"[Lyrics] AZLyrics failed: {e}")
+        print(f"[Lyrics] Trying Genius fallback...")
+
+        # Genius fallback
+        headers = {"User-Agent": "Mozilla/5.0"}
+        genius_url = f"https://genius.com/songs/{song_id}"
+        try:
+            res = requests.get(genius_url, headers=headers)
+            if res.status_code != 200:
+                raise Exception(f"Genius failed: {res.status_code}")
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(res.text, "html.parser")
+            divs = soup.find_all("div", {"data-lyrics-container": "true"})
+            if not divs:
+                raise Exception("No Genius lyrics found")
+
+            lyrics = "\n".join([
+                elem.get_text(separator="\n").strip()
+                for div in divs
+                for elem in div.children
+                if (elem.name is None or elem.name == "a")
+            ])
+        except Exception as gerr:
+            print(f"[Lyrics] Genius fallback also failed: {gerr}")
+            return False
+
+    # Save locally & upload
+    local_path = os.path.join(DOWNLOAD_FOLDER, f"{song_id}_lyrics.txt")
+    with open(local_path, "w") as f:
+        f.write(lyrics)
+
+    gcs_path = f"songs/{song_id}/lyrics.txt"
+    upload_file_to_gcs(f"gs://{BUCKET_NAME}/{gcs_path}", local_path)
+    os.remove(local_path)
+    print(f"[Lyrics] Uploaded lyrics.txt to GCS: {gcs_path}")
+    return True
+
 def download_song_to_gcs_and_queue_job(song_id, song_name, artist_name):
     print(f"Downloading: {song_name} by {artist_name} (ID: {song_id})")
 
@@ -224,6 +301,10 @@ def download_song_to_gcs_and_queue_job(song_id, song_name, artist_name):
     os.remove(local_wav_path)
     print(f"Download complete for: {song_id}")
 
+    if not download_lyrics_and_upload(song_id, song_name, artist_name):
+        print(f"[Lyrics] Failed to fetch lyrics for {song_id}, skipping job trigger.")
+        return None
+
     # title_enc = quote_plus(song_name)
     # artist_enc = quote_plus(artist_name)
     # print(title_enc)
@@ -237,7 +318,7 @@ def download_song_to_gcs_and_queue_job(song_id, song_name, artist_name):
     # Send POST request to GKE endpoint to start processing
     try:
         response = requests.post(
-            f"https://{GKE_API_URL}/start_processing",
+            f"{GKE_API_URL}/start_processing",
             json={
                 "song_id": song_id,
                 "title": song_name,
@@ -252,7 +333,7 @@ def download_song_to_gcs_and_queue_job(song_id, song_name, artist_name):
         return None
 
     # TODO: Handle unknown_job_id case in HTML.
-    return response.json().get("job_id", "unknown_job_id")
+    return response.json()
 
 @app.route("/start_processing", methods=["POST"])
 def start_processing():
@@ -260,16 +341,18 @@ def start_processing():
         data = request.get_json()
     else:
         data = request.form
-    title = data["title"]
-    artist = data["artist"]
+    # title = data["title"]
+    # artist = data["artist"]
     song_id = str(data["song_id"])
-    
+    title, artist = get_title_artist_from_genius(song_id)
+    print(song_id,title,artist)
     # Generate job ID
     # job_id = str(uuid.uuid4()
 
     try:
         # Download the song locally and upload to GCS, then queue the job in the remote processing cluster.
         job_id = download_song_to_gcs_and_queue_job(song_id, title, artist)
+        print(job_id)
         if request.is_json:
             return jsonify({
                 "song_id": song_id,
@@ -445,7 +528,7 @@ def processing_page(job_id):
     title = request.args.get("title", "Loading...")
     artist = request.args.get("artist", "Please wait")
     song = request.args.get("song", "Please wait")
-    frontend_check_url = f"https://{GKE_API_URL}/check_status/{job_id}"
+    frontend_check_url = f"{GKE_API_URL}/check_status/{job_id}"
     print(f"[processing_page] job_id={job_id}, title={title}, artist={artist}, song={song}, url={frontend_check_url}")
     return render_template('processing_local.html', job_id=job_id, title=title, artist=artist, song=song, frontend_check_url=frontend_check_url)
 
