@@ -12,6 +12,16 @@ from forcealign import ForceAlign
 from shared import gcs_utils
 from shared import constants
 
+import os
+import nltk
+nltk.data.path.append(os.environ.get("NLTK_DATA", "/app/nltk_data"))
+print("downloading averaged_perceptron_tagger")
+nltk.download('averaged_perceptron_tagger')
+print("done averaged_perceptron_tagger")
+print("downloading averaged_perceptron_tagger")
+nltk.download('averaged_perceptron_tagger_eng')
+print("done averaged_perceptron_tagger_eng")
+
 RABBITMQ_HOST = constants.RABBITMQ_HOST
 LYRICS_QUEUE_NAME = constants.LYRICS_QUEUE_NAME
 EVENT_TRACKER_QUEUE_NAME = constants.EVENT_TRACKER_QUEUE_NAME
@@ -244,11 +254,18 @@ def callback(ch, method, properties, body):
 
         try:
             # Step 1: Download lyrics. If it fails, skip alignment.
-            if not download_and_store_lyrics(song_id, song_name, artist_name):
-                print(f"[Lyrics Worker] Lyrics download failed for {song_id}, skipping.")
-                # Notify event tracker about failure.
+            # if not download_and_store_lyrics(song_id, song_name, artist_name):
+            #     print(f"[Lyrics Worker] Lyrics download failed for {song_id}, skipping.")
+            #     # Notify event tracker about failure.
+            #     notify_event_tracker(ch, "Failed", job_id, song_id,
+            #                          f"Lyrics download failed for job {job_id}, song {song_id}")
+            #     ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            #     return
+            lyrics_gcs_path = gcs_utils.get_artifact_url(song_id, "lyrics.txt")
+            if not gcs_utils.gcs_file_exists(lyrics_gcs_path):
+                print(f"[Lyrics Worker] lyrics.txt not found in GCS for {song_id}, skipping.")
                 notify_event_tracker(ch, "Failed", job_id, song_id,
-                                     f"Lyrics download failed for job {job_id}, song {song_id}")
+                                     f"lyrics.txt not found in GCS for job {job_id}, song {song_id}")
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
                 return
 

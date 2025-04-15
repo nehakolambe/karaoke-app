@@ -25,7 +25,7 @@ resource "kubernetes_deployment" "data_reader" {
       spec {
         container {
           name  = "data-reader"
-          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/data-reader-service:latest"
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/data-reader-service:local_final"
 
           port {
             container_port = 5002

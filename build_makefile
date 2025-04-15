@@ -1,0 +1,41 @@
+# Usage:
+#   make -f build_makefile                  # Normal build (uses cache)
+#   make -f build_makefile NO_CACHE=true    # Build without cache
+#   make -j -f build_makefile               # Parallel build (with cache)
+#   make -j -f build_makefile NO_CACHE=true # Parallel build (no cache)
+
+REGISTRY=us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry
+TAG=local_final
+
+# Build arg
+DOCKER_CACHE := $(if $(NO_CACHE),--no-cache,)
+
+.PHONY: all auth data_reader event_tracker frontend music_splitter sync_lyrics
+
+all: auth data_reader event_tracker frontend sync_lyrics music_splitter
+
+auth:
+	( cd auth && \
+	docker build $(DOCKER_CACHE) -t $(REGISTRY)/auth-service:$(TAG) . && \
+	docker push $(REGISTRY)/auth-service:$(TAG) )
+
+data_reader:
+	( cd data_reader_service && \
+	docker build $(DOCKER_CACHE) -t $(REGISTRY)/data-reader-service:$(TAG) . && \
+	docker push $(REGISTRY)/data-reader-service:$(TAG) )
+
+event_tracker:
+	docker build $(DOCKER_CACHE) -f event_tracker/Dockerfile -t $(REGISTRY)/event-tracker:$(TAG) . && \
+	docker push $(REGISTRY)/event-tracker:$(TAG)
+
+frontend:
+	docker build $(DOCKER_CACHE) -f frontend/Dockerfile -t $(REGISTRY)/frontend:$(TAG) . && \
+	docker push $(REGISTRY)/frontend:$(TAG)
+
+music_splitter:
+	docker build $(DOCKER_CACHE) -f music_splitter/Dockerfile -t $(REGISTRY)/music-splitter:$(TAG) . && \
+	docker push $(REGISTRY)/music-splitter:$(TAG)
+
+sync_lyrics:
+	docker build $(DOCKER_CACHE) -f sync_lyrics/Dockerfile -t $(REGISTRY)/sync_lyrics:$(TAG) . && \
+	docker push $(REGISTRY)/sync_lyrics:$(TAG)

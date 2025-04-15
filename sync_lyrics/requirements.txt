@@ -3,3 +3,5 @@ forcealign==1.1.9
 pika==1.3.2
 Requests==2.32.3
 google-cloud-storage==3.1.0
+nltk==3.8.1
+g2p_en==2.1.0

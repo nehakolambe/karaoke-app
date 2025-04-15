@@ -35,7 +35,7 @@ resource "kubernetes_deployment" "event_tracker" {
 
         container {
           name  = "event-tracker"
-          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/event-tracker:latest"
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/event-tracker:local_final"
           # image = "suyog005/event-tracker:latest"
 
           env {

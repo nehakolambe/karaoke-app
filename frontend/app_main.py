@@ -10,9 +10,11 @@ import uuid
 import pika
 import json
 from shared import constants
+from flask_cors import CORS
 
 app = Flask(__name__)
 load_dotenv()
+CORS(app)
 
 # ---------- CONFIGURATION ----------
 LASTFM_API_KEY = os.getenv("LASTFM_API_KEY")
@@ -339,9 +341,9 @@ def start_processing():
     # print("[Queueing Job]", download_message)
     splitter_message = {
         "job_id": job_id,
-        "song_id": str(song_id),
+        "song_id": song_id,
         "song_name": title,
-        "artist": artist
+        "artist_name": artist,
     }
     print("[Queueing Job]", splitter_message)
 
@@ -367,7 +369,7 @@ def start_processing():
             body=json.dumps(splitter_message),
             properties=pika.BasicProperties(delivery_mode=2)
         )
-        return job_id
+        return jsonify(job_id)
     
     except Exception as e:
         print("Error queuing task:", e)
@@ -407,18 +409,16 @@ def check_status(job_id):
     print(f"[check_status] Proxying to data-reader for job_id: {job_id}")
     try:
         resp = requests.get(f"{DATA_READER_URL}/job-history/{job_id}", timeout=5)
+        print(resp)
         if resp.status_code == 200:
             data = resp.json()
+            print(data)
 
             # Log to event tracker only if status is complete
             if data.get("status") == "complete":
                 user_email = session.get("email")
                 if user_email:
                     try:
-                        connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
-                        channel = connection.channel()
-                        channel.queue_declare(queue=EVENT_TRACKER_QUEUE_NAME)
-
                         history_message = {
                             "song_id": str(data["song_id"]),
                             "timestamp": str(datetime.datetime.now(datetime.timezone.utc).isoformat()),
@@ -436,7 +436,7 @@ def check_status(job_id):
                         print(f"[check_status] Logged song view for {user_email} - {data['song_id']}")
                     except Exception as e:
                         print(f"[check_status] Error sending play event to event tracker: {e}")
-            return data.get("status")
+            return jsonify(data)
         else:
             print(f"[check_status] Non-200 response from data-reader: {resp.status_code}")
         return Response(resp.content, status=resp.status_code, content_type=resp.headers.get('Content-Type'))

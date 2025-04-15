@@ -26,11 +26,13 @@ def job_history(job_id):
 
         if job.exists:
             job_data = job.to_dict()
+            print(job_data)
             statuses = [
                 job_data.get('lyrics_status'),
-                job_data.get('download_status'),
+                # job_data.get('download_status'),
                 job_data.get('vocals_status')
             ]
+            print(statuses)
 
             if all(s == "Completed" for s in statuses):
                 overall_status = "complete"

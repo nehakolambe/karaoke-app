@@ -34,7 +34,7 @@ resource "kubernetes_deployment" "frontend" {
 
         container {
           name  = "frontend"
-          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/frontend:latest"
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/frontend:local_final"
           # image = "nehakolambe15/frontend:latest"
 
           port {

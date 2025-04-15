@@ -15,6 +15,7 @@ COPY frontend /app/frontend
 COPY shared /app/shared
 
 ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
 
 # Install base pip packages needed for setup-time dependencies
 RUN pip install --upgrade pip

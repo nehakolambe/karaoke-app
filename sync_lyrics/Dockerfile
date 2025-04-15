@@ -1,32 +1,48 @@
 FROM python:3.9-slim
 
-# Install system dependencies, including SoX and ffmpeg
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     sox \
     libsox-dev \
     libsox-fmt-all \
     curl \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+ENV NLTK_DATA=/app/nltk_data
+ENV TORCH_HOME=/app/torch_cache
+
 WORKDIR /app/sync_lyrics
 
-# Copy sync_lyrics and shared code
+COPY sync_lyrics/requirements.txt /app/sync_lyrics/
+
+RUN pip install --upgrade pip && \
+    pip install numpy typing_extensions && \
+    pip install --no-cache-dir -r /app/sync_lyrics/requirements.txt
+
+
+RUN mkdir -p /app/nltk_data/taggers && \
+    curl -L -o /app/nltk_data/taggers/averaged_perceptron_tagger.zip \
+        https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/taggers/averaged_perceptron_tagger.zip && \
+    curl -L -o /app/nltk_data/taggers/averaged_perceptron_tagger_eng.zip \
+        https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/taggers/averaged_perceptron_tagger_eng.zip && \
+    unzip /app/nltk_data/taggers/averaged_perceptron_tagger.zip -d /app/nltk_data/taggers/ && \
+    unzip /app/nltk_data/taggers/averaged_perceptron_tagger_eng.zip -d /app/nltk_data/taggers/ && \
+    rm /app/nltk_data/taggers/*.zip
+
+RUN chmod -R 755 /app/nltk_data
+
 COPY sync_lyrics /app/sync_lyrics/
-COPY shared /app/shared
+COPY shared /app/shared/
 
-# Set PYTHONPATH so 'shared' is importable
-ENV PYTHONPATH=/app
+RUN python -c "\
+import nltk; \
+nltk.data.path.append('/app/nltk_data'); \
+nltk.data.find('taggers/averaged_perceptron_tagger'); \
+nltk.data.find('taggers/averaged_perceptron_tagger_eng')"
 
-# Upgrade pip
-RUN pip install --upgrade pip
-
-# Install pre-dependencies required for packages in requirements.txt
-RUN pip install numpy typing_extensions
-
-# Now install the full requirements
-RUN pip install --no-cache-dir -r /app/sync_lyrics/requirements.txt
 
 # Run the worker
 CMD ["python", "sync_lyrics.py"]

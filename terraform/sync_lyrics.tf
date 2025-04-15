@@ -34,8 +34,7 @@ resource "kubernetes_deployment" "sync_lyrics" {
 
         container {
           name  = "sync-lyrics"
-          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/sync_lyrics:latest"
-          # image = "nehakolambe15/sync-lyrics:latest"
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/sync_lyrics:local_final"
 
           port {
             container_port = 8080
@@ -61,10 +60,36 @@ resource "kubernetes_deployment" "sync_lyrics" {
             value = "/secrets/service-account.json"
           }
 
+          env {
+            name = "NLTK_DATA"
+            value = "/app/nltk_data"
+          }
+
+          env {
+            name = "TORCH_HOME"
+            value = "/app/torch_cache"
+          }
+
           volume_mount {
             name       = "gcp-creds"
             mount_path = "/secrets"
             read_only  = true
+          }
+
+          volume_mount {
+            name       = "torch-cache"
+            mount_path = "/app/torch_cache"
+          }
+
+          resources {
+            requests = {
+              memory = "6Gi"
+              cpu    = "1500m"
+            }
+            limits = {
+              memory = "12Gi"
+              cpu    = "3000m"
+            }
           }
         }
 
@@ -74,6 +99,12 @@ resource "kubernetes_deployment" "sync_lyrics" {
             secret_name = "firestore-key"
           }
         }
+
+        volume {
+          name = "torch-cache"
+          empty_dir {}
+        }
+
       }
     }
   }

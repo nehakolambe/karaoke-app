@@ -3,6 +3,8 @@ GKE_CLUSTER := voxoff-cluster
 GCP_REGION := us-central1
 GCP_PROJECT := bda-karaoke-app
 DOCKER_REGISTRY := us-central1-docker.pkg.dev
+GKE_MACHINE_TYPE := n2-standard-8
+GKE_NODE_COUNT := 4
 
 # Get absolute path to the project root (one level up from this Makefile)
 PROJECT_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))..)
@@ -65,8 +67,7 @@ teardown-minikube: reset-docker-env
 teardown-gke:
 	@echo "Destroying GKE resources..."
 	cd "$(PROJECT_ROOT)/terraform" && terraform destroy -var-file=environments/gke.tfvars -auto-approve
-	@gcloud container clusters delete $(GKE_CLUSTER) \
-		--region=$(GCP_REGION) --quiet || true
+	@gcloud container clusters delete $(GKE_CLUSTER) --zone=$(GCP_REGION)-a --quiet || true
 	@echo "GKE cluster deleted."
 
 # ---------- Terraform Init ----------
@@ -80,7 +81,7 @@ init:
 
 gke-auth:
 	@echo "Fetching credentials for GKE cluster '$(GKE_CLUSTER)'..."
-	@gcloud container clusters get-credentials $(GKE_CLUSTER) --region=$(GCP_REGION) --project=$(GCP_PROJECT)
+	@gcloud container clusters get-credentials $(GKE_CLUSTER) --zone=$(GCP_REGION)-a --project=$(GCP_PROJECT)
 	@echo "Authenticated with GKE."
 
 # ---------- Firestore Auth ----------
@@ -144,9 +145,12 @@ create-gke-cluster:
 		if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
 			echo "Creating GKE cluster..."; \
 			gcloud container clusters create $(GKE_CLUSTER) \
-				--region=$(GCP_REGION) \
+				--zone=$(GCP_REGION)-a \
 				--project=$(GCP_PROJECT) \
-				--num-nodes=1 \
+				--num-nodes=$(GKE_NODE_COUNT) \
+				--machine-type=$(GKE_MACHINE_TYPE) \
+				--disk-type=pd-balanced \
+				--disk-size=75 \
 				--quiet; \
 		else \
 			echo "Cluster creation aborted."; \
@@ -158,6 +162,6 @@ create-gke-cluster:
 
 	@echo "Fetching GKE credentials..."
 	@gcloud container clusters get-credentials $(GKE_CLUSTER) \
-		--region=$(GCP_REGION) \
+		--zone=$(GCP_REGION)-a \
 		--project=$(GCP_PROJECT)
 	@echo "GKE cluster credentials configured."
