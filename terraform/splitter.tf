@@ -25,7 +25,6 @@ resource "kubernetes_deployment" "music_splitter" {
       }
 
       spec {
-        # Useful to let minikube pull from Google artifact registry.
         dynamic "image_pull_secrets" {
           for_each = var.use_image_pull_secret ? [1] : []
           content {
@@ -35,9 +34,7 @@ resource "kubernetes_deployment" "music_splitter" {
 
         container {
           name  = "music-splitter"
-          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/music-splitter:latest"
-          # image = "pratikbhirud/music-splitter:latest"
-
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/music-splitter:local_final"
 
           port {
             container_port = 8080
@@ -57,30 +54,40 @@ resource "kubernetes_deployment" "music_splitter" {
             name = "RABBITMQ_PASS"
             value = "password"
           }
+
+          # GCP Credentials path
+          env {
+            name  = "GOOGLE_APPLICATION_CREDENTIALS"
+            value = "/secrets/service-account.json"
+          }
+
+          # Mount GCP service account key
+          volume_mount {
+            name       = "gcp-creds"
+            mount_path = "/secrets"
+            read_only  = true
+          }
+
+          resources {
+            requests = {
+              memory = "6Gi"
+              cpu    = "1500m"
+            }
+            limits = {
+              memory = "12Gi"
+              cpu    = "3000m"
+            }
+          }
+        }
+
+        # Define the secret volume
+        volume {
+          name = "gcp-creds"
+          secret {
+            secret_name = "firestore-key"
+          }
         }
       }
     }
   }
 }
-
-resource "kubernetes_service" "music_splitter" {
-  depends_on = [helm_release.rabbitmq]
-
-  metadata {
-    name = "music-splitter"
-  }
-
-  spec {
-    selector = {
-      app = "music-splitter"
-    }
-
-    port {
-      port        = 8080
-      target_port = 8080
-    }
-
-    type = "ClusterIP"
-  }
-}
-

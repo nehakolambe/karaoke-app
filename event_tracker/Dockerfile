@@ -16,6 +16,7 @@ COPY shared /app/shared
 
 # Set PYTHONPATH so 'shared' is importable
 ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r /app/event_tracker/requirements.txt

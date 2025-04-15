@@ -17,6 +17,9 @@ LYRICS_QUEUE_NAME = constants.LYRICS_QUEUE_NAME
 SPLIT_QUEUE_NAME = constants.SPLIT_QUEUE_NAME
 EVENT_TRACKER_QUEUE_NAME = constants.EVENT_TRACKER_QUEUE_NAME
 
+separator = Separator('spleeter:2stems')  # heavy TF model loaded once
+audio_loader = AudioAdapter.default()
+
 # Queue functions
 def notify_event_tracker(ch, status, job_id="", song_id="", error_message=None):
     event_tracker_message = {
@@ -66,11 +69,11 @@ def split_and_upload_instrumental(job_id: str, song_id: str):
 
     instrumental_url = gcs_utils.get_instrumental_url(song_id)
     vocals_url = gcs_utils.get_vocals_url(song_id)
+
     if gcs_utils.gcs_file_exists(instrumental_url) and gcs_utils.gcs_file_exists(vocals_url):
         print(f"Instrumental and vocals files already exist, skipping processing for job_id: {job_id}, song_id: {song_id}")
         return
 
-    # Use persistent working dir
     working_dir = os.path.join("downloads", song_id)
     os.makedirs(working_dir, exist_ok=True)
 
@@ -78,59 +81,47 @@ def split_and_upload_instrumental(job_id: str, song_id: str):
     instrumental_wav_path = os.path.join(working_dir, "instrumental.wav")
     vocal_wav_path = os.path.join(working_dir, "vocal.wav")
 
-    # Download original.wav from GCS
-    original_url = gcs_utils.get_artifact_url(song_id, "original.wav")
-    print(f"Downloading original.wav from: {original_url}")
-    gcs_utils.download_file_from_gcs(original_url, original_path)
+    try:
+        # Download original.wav
+        original_url = gcs_utils.get_artifact_url(song_id, "original.wav")
+        print(f"Downloading original.wav from: {original_url}")
+        gcs_utils.download_file_from_gcs(original_url, original_path)
 
-    # Split with Spleeter
-    print("Running Spleeter...")
-    separator = Separator('spleeter:2stems')
-    audio_loader = AudioAdapter.default()
+        # Separate stems
+        print("Running Spleeter...")
+        waveform, sample_rate = audio_loader.load(original_path)
+        separated = separator.separate(waveform)
 
-    waveform, sample_rate = audio_loader.load(original_path)
-    separated = separator.separate(waveform)
-    accompaniment = separated['accompaniment']
-    vocals = separated['vocals']
+        # Save files
+        print("Saving instrumental.wav locally...")
+        audio_loader.save(instrumental_wav_path, separated['accompaniment'], sample_rate=sample_rate)
+        print("Saving vocals.wav locally...")
+        audio_loader.save(vocal_wav_path, separated['vocals'], sample_rate=sample_rate)
 
-    print("Saving instrumental.wav locally...")
-    audio_loader.save(instrumental_wav_path, accompaniment, sample_rate=sample_rate)
-
-    print("Saving vocals.wav locally...")
-    audio_loader.save(vocal_wav_path, vocals, sample_rate=sample_rate)
-
-    # Upload to GCS parallel using threads
-    errors = {}
-    threads = [
-        threading.Thread(
-            target=upload_file_safe,
-            args=(
-                instrumental_url,
-                instrumental_wav_path,
-                "instrumental",
-                errors
+        # Upload in parallel
+        errors = {}
+        threads = [
+            threading.Thread(
+                target=upload_file_safe,
+                args=(instrumental_url, instrumental_wav_path, "instrumental", errors)
+            ),
+            threading.Thread(
+                target=upload_file_safe,
+                args=(vocals_url, vocal_wav_path, "vocals", errors)
             )
-        ),
-        threading.Thread(
-            target=upload_file_safe,
-             args=(
-                 vocals_url,
-                 vocal_wav_path,
-                 "vocals",
-                 errors)
-        )
-    ]
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
 
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+        if errors:
+            raise RuntimeError(f"Failed to upload: {', '.join(errors.keys())} — {errors}")
 
-    if errors:
-        raise RuntimeError(f"Failed to upload: {', '.join(errors.keys())} — {errors}")
+        print(f"Done processing {song_id}")
 
-    shutil.rmtree(working_dir)
-    print(f"Done processing {song_id}")
+    finally:
+        shutil.rmtree(working_dir, ignore_errors=True)
 
 def callback(ch, method, properties, body):
     try:

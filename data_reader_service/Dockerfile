@@ -16,6 +16,7 @@ EXPOSE 5002
 # Set environment variables
 ENV FLASK_APP=app.py
 ENV FLASK_ENV=development
+ENV PYTHONUNBUFFERED=1
 
 # Command to run the application
 CMD ["flask", "run", "--host=0.0.0.0", "--port=5002"]
