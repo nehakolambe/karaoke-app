@@ -225,6 +225,9 @@ fullscreenBtn.onclick = () => {
 
 
 function processSong(songId, title, artist) {
+    const loader = document.getElementById('loader-overlay');
+    if (loader) loader.style.display = 'flex';
+
     fetch('/start_processing', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -235,11 +238,13 @@ function processSong(songId, title, artist) {
         if (data.redirect_url) {
             window.location.href = data.redirect_url;
         } else {
+            if (loader) loader.style.display = 'none';
             alert("Something went wrong. Please try again later.");
         }
     })
     .catch(err => {
         console.error("Error triggering processing:", err);
+        if (loader) loader.style.display = 'none';
         alert("An error occurred.");
     });
 }
