@@ -18,7 +18,6 @@ def update_firestore_new_job(job_id, song_id, timestamp):
         default_data = {
             "job_id": job_id,
             "song_id": song_id,
-            # "download_status": "inProcess",
             "vocals_status": "inProcess",
             "lyrics_status": "inProcess",
             "last_updated_timestamp": timestamp,
@@ -40,7 +39,6 @@ def update_firestore(job_id, song_id, source, status, timestamp, error_message):
 
     # Map service name to field
     field_map = {
-        # "downloader": "download_status",
         "splitter": "vocals_status",
         "lyrics_syncer": "lyrics_status"
     }
@@ -59,6 +57,53 @@ def update_firestore(job_id, song_id, source, status, timestamp, error_message):
     doc_ref.update(update_data)
     print(f"Updated {status_field} to {status} for job_id: {job_id}")
 
+# Handle "frontend" source: create new job
+def handle_frontend_update(data):
+    job_id = data.get("job_id")
+    song_id = data.get("song_id")
+    timestamp = data.get("timestamp")
+    if not all([job_id, song_id, timestamp]):
+        raise ValueError("Missing required fields for 'frontend'")
+    update_firestore_new_job(job_id, song_id, timestamp)
+
+# Handle "splitter", "lyrics_syncer": job status updates
+def handle_job_update(data):
+    job_id = data.get("job_id")
+    song_id = data.get("song_id")
+    timestamp = data.get("timestamp")
+    status = data.get("status")
+    error_message = data.get("error_message", "NULL")
+
+    if not all([job_id, song_id, timestamp, status]):
+        raise ValueError("Missing required fields for processing update")
+
+    if status not in ["Completed", "Failed"]:
+        raise ValueError(f"Invalid status: {status}. Must be 'Completed' or 'Failed'.")
+
+    source = data.get("source")
+    update_firestore(job_id, song_id, source, status, timestamp, error_message)
+
+# Handle "history" source: track song in user history
+def handle_user_history_update(data):
+    song_id = data.get("song_id")
+    timestamp = data.get("timestamp")
+    user_email = data.get("user_email")
+    if not all([song_id, timestamp, user_email]):
+        raise ValueError("Missing required fields for 'history'")
+
+    user_ref = db.collection("users").document(user_email)
+    user_doc = user_ref.get()
+    if user_doc.exists:
+        user_ref.update({
+            "downloaded_songs": firestore.ArrayUnion([song_id])
+        })
+    else:
+        user_ref.set({
+            "downloaded_songs": [song_id]
+        })
+    print(f"Added song {song_id} to user {user_email}'s history.")
+
+
 # RabbitMQ message callback
 def callback(ch, method, properties, body):
     try:
@@ -68,47 +113,11 @@ def callback(ch, method, properties, body):
             raise ValueError("Missing 'source' in message")
 
         if source == "frontend":
-            job_id = data.get("job_id")
-            song_id = data.get("song_id")
-            timestamp = data.get("timestamp")
-            if not all([job_id, song_id, timestamp]):
-                raise ValueError("Missing required fields for 'frontend'")
-            update_firestore_new_job(job_id, song_id, timestamp)
-
+            handle_frontend_update(data)
         elif source in ["splitter", "lyrics_syncer"]:
-            job_id = data.get("job_id")
-            song_id = data.get("song_id")
-            timestamp = data.get("timestamp")
-            status = data.get("status")
-            error_message = data.get("error_message", "NULL")
-
-            if not all([job_id, song_id, timestamp, status]):
-                raise ValueError("Missing required fields for processing update")
-
-            if status not in ["Completed", "Failed"]:
-                raise ValueError(f"Invalid status: {status}. Must be 'Completed' or 'Failed'.")
-
-            update_firestore(job_id, song_id, source, status, timestamp, error_message)
-
+            handle_job_update(data)
         elif source == "history":
-            song_id = data.get("song_id")
-            timestamp = data.get("timestamp")
-            user_email = data.get("user_email")
-            if not all([song_id, timestamp, user_email]):
-                raise ValueError("Missing required fields for 'history'")
-
-            user_ref = db.collection("users").document(user_email)
-            user_doc = user_ref.get()
-            if user_doc.exists:
-                user_ref.update({
-                    "downloaded_songs": firestore.ArrayUnion([song_id])
-                })
-            else:
-                user_ref.set({
-                    "downloaded_songs": [song_id]
-                })
-            print(f"Added song {song_id} to user {user_email}'s history.")
-
+            handle_user_history_update(data)
         else:
             raise ValueError(f"Unknown source: {source}")
 
@@ -117,6 +126,7 @@ def callback(ch, method, properties, body):
     except Exception as e:
         print(f"Error processing message: {e}")
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+
 
 # RabbitMQ setup
 def start_event_tracker():
