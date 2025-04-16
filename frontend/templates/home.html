@@ -22,7 +22,10 @@
                                 <div class="card-body">
                                     <h6 class="card-title">{{ song.title }}</h6>
                                     <p class="card-text text-muted">{{ song.artist }}</p>
-                                    <a href="/song/{{ song.song_id }}?title={{ song.title }}&artist={{ song.artist }}" class="btn btn-sm btn-outline-primary">Play Again</a>
+                                    <!-- <a href="/song/{{ song.song_id }}?title={{ song.title }}&artist={{ song.artist }}" class="btn btn-sm btn-outline-primary">Play Again</a> -->
+                                    <button onclick="processSong('{{ song.song_id }}', '{{ song.title }}', '{{ song.artist }}')" class="btn btn-sm btn-outline-primary">
+                                        Play Again
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -43,7 +46,10 @@
                                 <div class="card-body">
                                     <h6 class="card-title">{{ song.name }}</h6>
                                     <p class="card-text text-muted">{{ song.artist.name }}</p>
-                                    <a href="/song/{{ song.song_id }}?title={{ song.name }}&artist={{ song.artist.name }}" class="btn btn-sm btn-outline-secondary">Try it</a>
+                                    <!-- <a href="/song/{{ song.song_id }}?title={{ song.name }}&artist={{ song.artist.name }}" class="btn btn-sm btn-outline-secondary">Try it</a> -->
+                                    <button onclick="processSong('{{ song.song_id }}', '{{ song.name }}', '{{ song.artist.name }}')" class="btn btn-sm btn-outline-secondary">
+                                        Try it
+                                    </button>
                                 </div>
                             </div>
                         </div>

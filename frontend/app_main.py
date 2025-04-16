@@ -409,22 +409,29 @@ def check_status(job_id):
     print(f"[check_status] Proxying to data-reader for job_id: {job_id}")
     try:
         resp = requests.get(f"{DATA_READER_URL}/job-history/{job_id}", timeout=5)
-        print(resp)
+        print("CHECK STATUS RESPONSE - ",resp.status_code)
         if resp.status_code == 200:
             data = resp.json()
-            print(data)
+            print("CHECK STATUS DATA - ", data)
+            print("CHECK STATUS STATUS - ", data.get("status"))
 
             # Log to event tracker only if status is complete
             if data.get("status") == "complete":
-                user_email = session.get("email")
+                # user_email = session.get("email")
+                user_email = request.args.get("email")
+                song_id = request.args.get("song_id")
+                print("CHECK STATUS EMAIL - ", user_email)
+                print("CHECK STATUS SONG_ID - ", str(song_id))
                 if user_email:
                     try:
                         history_message = {
-                            "song_id": str(data["song_id"]),
+                            "song_id": str(song_id),
                             "timestamp": str(datetime.datetime.now(datetime.timezone.utc).isoformat()),
                             "source": "history",
                             "user_email": user_email
                         }
+                        print("CHECK STATUS MESSAGE - ", history_message)
+                        print("CHANNEL PUBLISH START")
 
                         channel.basic_publish(
                             exchange="",
@@ -433,7 +440,8 @@ def check_status(job_id):
                             properties=pika.BasicProperties()
                         )
                         connection.close()
-                        print(f"[check_status] Logged song view for {user_email} - {data['song_id']}")
+                        print("CHANNEL PUBLISH END")
+                        print(f"[check_status] Logged song view for {user_email} - {song_id}")
                     except Exception as e:
                         print(f"[check_status] Error sending play event to event tracker: {e}")
             return jsonify(data)

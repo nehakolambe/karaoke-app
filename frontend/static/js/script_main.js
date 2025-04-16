@@ -221,3 +221,25 @@ fullscreenBtn.onclick = () => {
         lyricsBox.classList.remove("fullscreen-mode");
     }
 };
+
+
+
+function processSong(songId, title, artist) {
+    fetch('/start_processing', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({song_id: songId, title: title, artist: artist})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.redirect_url) {
+            window.location.href = data.redirect_url;
+        } else {
+            alert("Something went wrong. Please try again later.");
+        }
+    })
+    .catch(err => {
+        console.error("Error triggering processing:", err);
+        alert("An error occurred.");
+    });
+}

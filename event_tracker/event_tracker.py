@@ -18,7 +18,7 @@ def update_firestore_new_job(job_id, song_id, timestamp):
         default_data = {
             "job_id": job_id,
             "song_id": song_id,
-            "download_status": "inProcess",
+            # "download_status": "inProcess",
             "vocals_status": "inProcess",
             "lyrics_status": "inProcess",
             "last_updated_timestamp": timestamp,
@@ -40,7 +40,7 @@ def update_firestore(job_id, song_id, source, status, timestamp, error_message):
 
     # Map service name to field
     field_map = {
-        "downloader": "download_status",
+        # "downloader": "download_status",
         "splitter": "vocals_status",
         "lyrics_syncer": "lyrics_status"
     }
@@ -75,7 +75,7 @@ def callback(ch, method, properties, body):
                 raise ValueError("Missing required fields for 'frontend'")
             update_firestore_new_job(job_id, song_id, timestamp)
 
-        elif source in ["downloader", "splitter", "lyrics_syncer"]:
+        elif source in ["splitter", "lyrics_syncer"]:
             job_id = data.get("job_id")
             song_id = data.get("song_id")
             timestamp = data.get("timestamp")
