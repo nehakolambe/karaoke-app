@@ -162,10 +162,6 @@ def home():
 def profile():
     return render_template('profile.html')
 
-@app.route('/history')
-def history():
-    return render_template('history.html')
-
 @app.route('/logout')
 def logout():
     session.clear()
@@ -253,9 +249,12 @@ def download_lyrics_and_upload(song_id, title, artist):
             ])
         except Exception as gerr:
             print(f"[Lyrics] Genius fallback also failed: {gerr}")
-            return False
+            return None
 
-    # Save locally & upload
+    if not lyrics or not lyrics.strip():
+        print(f"[Lyrics] Both AZLyrics and Genius returned empty.")
+        return None
+
     local_path = os.path.join(DOWNLOAD_FOLDER, f"{song_id}_lyrics.txt")
     with open(local_path, "w") as f:
         f.write(lyrics)
@@ -266,54 +265,92 @@ def download_lyrics_and_upload(song_id, title, artist):
     print(f"[Lyrics] Uploaded lyrics.txt to GCS: {gcs_path}")
     return True
 
+
+# def download_lyrics_and_upload(song_id, title, artist):
+#     print(f"[Lyrics] Attempting AZLyrics for: {artist} - {title}")
+#     lyrics = None
+#     try:
+#         url = build_azlyrics_url(artist, title)
+#         lyrics = scrape_azlyrics(url)
+#         print(f"[Lyrics] Scraped from AZLyrics")
+#     except Exception as e:
+#         print(f"[Lyrics] AZLyrics failed: {e}")
+#         print(f"[Lyrics] Trying Genius fallback...")
+
+#         # Genius fallback
+#         headers = {"User-Agent": "Mozilla/5.0"}
+#         genius_url = f"https://genius.com/songs/{song_id}"
+#         try:
+#             res = requests.get(genius_url, headers=headers)
+#             if res.status_code != 200:
+#                 raise Exception(f"Genius failed: {res.status_code}")
+#             from bs4 import BeautifulSoup
+#             soup = BeautifulSoup(res.text, "html.parser")
+#             divs = soup.find_all("div", {"data-lyrics-container": "true"})
+#             if not divs:
+#                 raise Exception("No Genius lyrics found")
+
+#             lyrics = "\n".join([
+#                 elem.get_text(separator="\n").strip()
+#                 for div in divs
+#                 for elem in div.children
+#                 if (elem.name is None or elem.name == "a")
+#             ])
+#         except Exception as gerr:
+#             print(f"[Lyrics] Genius fallback also failed: {gerr}")
+#             return False
+
+#     # Save locally & upload
+#     local_path = os.path.join(DOWNLOAD_FOLDER, f"{song_id}_lyrics.txt")
+#     with open(local_path, "w") as f:
+#         f.write(lyrics)
+
+#     gcs_path = f"songs/{song_id}/lyrics.txt"
+#     upload_file_to_gcs(f"gs://{BUCKET_NAME}/{gcs_path}", local_path)
+#     os.remove(local_path)
+#     print(f"[Lyrics] Uploaded lyrics.txt to GCS: {gcs_path}")
+#     return True
+
 def download_song_to_gcs_and_queue_job(song_id, song_name, artist_name):
     print(f"Downloading: {song_name} by {artist_name} (ID: {song_id})")
 
     query = f"{song_name} {artist_name} audio"
     local_wav_path = os.path.join(DOWNLOAD_FOLDER, f"{song_id}.wav")
-    gcs_path = f"songs/{song_id}/original.wav"
+    gcs_audio_path = f"songs/{song_id}/original.wav"
+    gcs_lyrics_path = f"songs/{song_id}/lyrics.txt"
 
-    # Skip if already uploaded
-    if gcs_file_exists(f"gs://{BUCKET_NAME}/{gcs_path}"):
-        print(f"File already exists in GCS: {gcs_path}")
-        return
+    # Skip download if audio already exists
+    if not gcs_file_exists(f"gs://{BUCKET_NAME}/{gcs_audio_path}"):
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(DOWNLOAD_FOLDER, f"{song_id}.%(ext)s"),
+            'postprocessors': [
+                {
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'wav',
+                    'preferredquality': '192',
+                }
+            ],
+        }
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([f"ytsearch:{query}"])
+        except Exception as e:
+            print(f"Error downloading from YouTube: {e}")
+            raise
+        upload_file_to_gcs(f"gs://{BUCKET_NAME}/{gcs_audio_path}", local_wav_path)
+        os.remove(local_wav_path)
+        print(f"Upload complete for: {song_id}")
+    else:
+        print(f"[Skip] Audio already exists in GCS for {song_id}")
 
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': os.path.join(DOWNLOAD_FOLDER, f"{song_id}.%(ext)s"),
-        'postprocessors': [
-            {
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'wav',
-                'preferredquality': '192',
-            }
-        ],
-    }
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([f"ytsearch:{query}"])
-    except Exception as e:
-        print(f"Error downloading from YouTube: {e}")
-        raise
-
-    upload_file_to_gcs(f"gs://{BUCKET_NAME}/{gcs_path}", local_wav_path)
-    os.remove(local_wav_path)
-    print(f"Download complete for: {song_id}")
-
-    if not download_lyrics_and_upload(song_id, song_name, artist_name):
-        print(f"[Lyrics] Failed to fetch lyrics for {song_id}, skipping job trigger.")
-        return None
-
-    # title_enc = quote_plus(song_name)
-    # artist_enc = quote_plus(artist_name)
-    # print(title_enc)
-    # print(artist_enc)
-
-    # # TODO: Send the POST request to the GKE entry point.
-    # job_id = f"https://{GKE_API_URL}/start_processing/song_id={song_id}&title={title_enc}&artist={artist_enc}"
-    # print(job_id)
-    # return job_id
+    # Skip lyrics download if they already exist
+    if not gcs_file_exists(f"gs://{BUCKET_NAME}/{gcs_lyrics_path}"):
+        if not download_lyrics_and_upload(song_id, song_name, artist_name):
+            print(f"[Lyrics] Failed to fetch lyrics for {song_id}, skipping job trigger.")
+            return "LYRICS_FAILED"
+    else:
+        print(f"[Skip] Lyrics already exist in GCS for {song_id}")
 
     # Send POST request to GKE endpoint to start processing
     try:
@@ -327,13 +364,110 @@ def download_song_to_gcs_and_queue_job(song_id, song_name, artist_name):
             timeout=10
         )
         response.raise_for_status()
+        return response.json()
+
         print(f"Successfully triggered processing job: {response.json()}")
     except Exception as e:
         print(f"Failed to trigger processing job: {e}")
         return None
 
-    # TODO: Handle unknown_job_id case in HTML.
-    return response.json()
+
+# def download_song_to_gcs_and_queue_job(song_id, song_name, artist_name):
+#     print(f"Downloading: {song_name} by {artist_name} (ID: {song_id})")
+
+#     query = f"{song_name} {artist_name} audio"
+#     local_wav_path = os.path.join(DOWNLOAD_FOLDER, f"{song_id}.wav")
+#     gcs_path = f"songs/{song_id}/original.wav"
+
+#     # Skip if already uploaded
+#     if gcs_file_exists(f"gs://{BUCKET_NAME}/{gcs_path}"):
+#         print(f"File already exists in GCS: {gcs_path}")
+#         return
+
+#     ydl_opts = {
+#         'format': 'bestaudio/best',
+#         'outtmpl': os.path.join(DOWNLOAD_FOLDER, f"{song_id}.%(ext)s"),
+#         'postprocessors': [
+#             {
+#                 'key': 'FFmpegExtractAudio',
+#                 'preferredcodec': 'wav',
+#                 'preferredquality': '192',
+#             }
+#         ],
+#     }
+
+#     try:
+#         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+#             ydl.download([f"ytsearch:{query}"])
+#     except Exception as e:
+#         print(f"Error downloading from YouTube: {e}")
+#         raise
+
+#     upload_file_to_gcs(f"gs://{BUCKET_NAME}/{gcs_path}", local_wav_path)
+#     os.remove(local_wav_path)
+#     print(f"Download complete for: {song_id}")
+
+#     if not download_lyrics_and_upload(song_id, song_name, artist_name):
+#         print(f"[Lyrics] Failed to fetch lyrics for {song_id}, skipping job trigger.")
+#         return None
+
+    # # Send POST request to GKE endpoint to start processing
+    # try:
+    #     response = requests.post(
+    #         f"{GKE_API_URL}/start_processing",
+    #         json={
+    #             "song_id": song_id,
+    #             "title": song_name,
+    #             "artist": artist_name
+    #         },
+    #         timeout=10
+    #     )
+    #     response.raise_for_status()
+    #     print(f"Successfully triggered processing job: {response.json()}")
+    # except Exception as e:
+    #     print(f"Failed to trigger processing job: {e}")
+    #     return None
+
+    # # TODO: Handle unknown_job_id case in HTML.
+    # return response.json()
+
+# @app.route("/start_processing", methods=["POST"])
+# def start_processing():
+#     data = request.get_json() if request.is_json else request.form
+#     song_id = str(data.get("song_id"))
+
+#     if not song_id:
+#         return jsonify({"error": "Missing song_id"}), 400
+
+#     title, artist = get_title_artist_from_genius(song_id)
+#     if not title or not artist:
+#         return jsonify({"error": "Failed to get song metadata from Genius"}), 400
+
+#     # job_id = str(uuid.uuid4())
+
+#     # Launch background thread to handle downloading and processing
+#     import threading
+#     def background_task():
+#         print(f"[Thread] Starting processing for song_id={song_id}")
+#         result = download_song_to_gcs_and_queue_job(song_id, title, artist)
+
+#         if result == "LYRICS_FAILED":
+#             print(f"[Thread] Lyrics fetch failed for song_id={song_id}")
+#             return
+
+#         job_id = result.get("job_id")  # <- Pull the job_id returned by GKE
+#         print(f"[Thread] Job {job_id} triggered successfully.")
+
+
+#     threading.Thread(target=background_task, daemon=True).start()
+
+#     # Immediately return redirect URL for the loading screen
+#     redirect_url = url_for('processing_page', job_id=job_id, title=title, artist=artist, song=song_id)
+#     return jsonify({
+#         "song_id": song_id,
+#         "redirect_url": redirect_url
+#     }), 200
+
 
 @app.route("/start_processing", methods=["POST"])
 def start_processing():
@@ -345,13 +479,16 @@ def start_processing():
     # artist = data["artist"]
     song_id = str(data["song_id"])
     title, artist = get_title_artist_from_genius(song_id)
-    print(song_id,title,artist)
+    print(song_id,title,artist) 
     # Generate job ID
     # job_id = str(uuid.uuid4()
 
     try:
         # Download the song locally and upload to GCS, then queue the job in the remote processing cluster.
         job_id = download_song_to_gcs_and_queue_job(song_id, title, artist)
+        if job_id == "LYRICS_FAILED":
+            print(f"[start_processing] Lyrics download failed, redirecting to error page.")
+            return redirect(url_for('error_page'))
         print(job_id)
         if request.is_json:
             return jsonify({
@@ -528,7 +665,9 @@ def processing_page(job_id):
     title = request.args.get("title", "Loading...")
     artist = request.args.get("artist", "Please wait")
     song = request.args.get("song", "Please wait")
-    frontend_check_url = f"{GKE_API_URL}/check_status/{job_id}"
+    # frontend_check_url = f"{GKE_API_URL}/check_status/{job_id}"
+    user_email = session.get("email")
+    frontend_check_url = f"{GKE_API_URL}/check_status/{job_id}?email={quote_plus(user_email)}&song_id={quote_plus(song)}"
     print(f"[processing_page] job_id={job_id}, title={title}, artist={artist}, song={song}, url={frontend_check_url}")
     return render_template('processing_local.html', job_id=job_id, title=title, artist=artist, song=song, frontend_check_url=frontend_check_url)
 

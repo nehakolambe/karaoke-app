@@ -36,7 +36,7 @@
     const title = "{{ title }}";
     const artist = "{{ artist }}";
     const songId = "{{ song }}";
-    const frontendCheckUrl = "{{ frontend_check_url }}";
+    const frontendCheckUrl = "{{ frontend_check_url | safe}}";
 
     function pollJobStatus() {
         fetch(frontendCheckUrl)
