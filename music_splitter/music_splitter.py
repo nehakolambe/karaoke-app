@@ -9,7 +9,7 @@ import pika
 from spleeter.audio.adapter import AudioAdapter
 from spleeter.separator import Separator
 
-from shared import gcs_utils
+from shared import gcs_utils as default_gcs_utils
 from shared import constants
 
 RABBITMQ_HOST = constants.RABBITMQ_HOST
@@ -25,8 +25,8 @@ def notify_event_tracker(ch, status, job_id="", song_id="", error_message=None):
     event_tracker_message = {
         "job_id": job_id,
         "song_id": str(song_id),
-        "source" : "splitter",
-        "status" : status,
+        "source": "splitter",
+        "status": status,
         "timestamp": str(datetime.datetime.now(datetime.timezone.utc).isoformat())
     }
 
@@ -56,7 +56,7 @@ def publish_to_lyrics_syncer_queue(ch, job_id, song_id, song_name, artist_name):
     print(f"Published to lyrics syncer queue for job_id: {job_id}, song_id: {song_id}")
 
 # Core functionality
-def upload_file_safe(url, local_path, label, errors):
+def upload_file_safe(url, local_path, label, errors, gcs_utils):
     try:
         print(f"Uploading {label} to: {url}")
         gcs_utils.upload_file_to_gcs(url, local_path)
@@ -64,7 +64,7 @@ def upload_file_safe(url, local_path, label, errors):
         print(f"Failed to upload {label}: {e}")
         errors[label] = str(e)
 
-def split_and_upload_instrumental(job_id: str, song_id: str):
+def split_and_upload_instrumental(job_id: str, song_id: str, audio_loader, separator, gcs_utils):
     print(f"Processing song ID: {song_id}")
 
     instrumental_url = gcs_utils.get_instrumental_url(song_id)
@@ -103,11 +103,11 @@ def split_and_upload_instrumental(job_id: str, song_id: str):
         threads = [
             threading.Thread(
                 target=upload_file_safe,
-                args=(instrumental_url, instrumental_wav_path, "instrumental", errors)
+                args=(instrumental_url, instrumental_wav_path, "instrumental", errors, gcs_utils)
             ),
             threading.Thread(
                 target=upload_file_safe,
-                args=(vocals_url, vocal_wav_path, "vocals", errors)
+                args=(vocals_url, vocal_wav_path, "vocals", errors, gcs_utils)
             )
         ]
         for t in threads:
@@ -123,37 +123,41 @@ def split_and_upload_instrumental(job_id: str, song_id: str):
     finally:
         shutil.rmtree(working_dir, ignore_errors=True)
 
+# Message handler logic (split out of callback for testability)
+def handle_message(message, ch, audio_loader, separator, gcs_utils):
+    job_id = message["job_id"]
+    song_id = message["song_id"]
+    song_name = message["song_name"]
+    artist_name = message["artist_name"]
+    print(f"Received message for songId: {song_id}")
+
+    try:
+        split_and_upload_instrumental(job_id, song_id, audio_loader, separator, gcs_utils)
+        # Notify event tracker
+        notify_event_tracker(ch, "Completed", job_id, song_id)
+        # Publish a job to lyrics syncer
+        publish_to_lyrics_syncer_queue(ch, job_id, song_id, song_name, artist_name)
+        # Send ack to rabbitmq broker.
+        ch.basic_ack(delivery_tag=message['delivery_tag'])
+    except Exception as processing_error:
+        print(f"Error while processing songId {song_id}: {processing_error}")
+        # TODO: Notify event tracker about failure
+        traceback.print_exc()
+        notify_event_tracker(ch, "Failed", job_id, song_id,
+                             f"Internal error while splitting music for job: {job_id}, song ID: {song_id}")
+        ch.basic_nack(delivery_tag=message['delivery_tag'], requeue=False)
+
 def callback(ch, method, properties, body):
     try:
         message = json.loads(body)
-        job_id = message["job_id"]
-        song_id = message["song_id"]
-        song_name = message["song_name"]
-        artist_name = message["artist_name"]
-        print(f"Received message for songId: {song_id}")
-
-        try:
-            split_and_upload_instrumental(job_id, song_id)
-            # Notify event tracker
-            notify_event_tracker(ch, "Completed", job_id, song_id)
-            # Publish a job to lyrics syncer
-            publish_to_lyrics_syncer_queue(ch, job_id, song_id, song_name, artist_name)
-            # Send ack to rabbitmq broker.
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-        except Exception as processing_error:
-            print(f"Error while processing songId {song_id}: {processing_error}")
-            # TODO: Notify event tracker about failure
-            traceback.print_exc()
-            notify_event_tracker(ch, "Failed", job_id, song_id,
-                                 f"Internal error while splitting music for job: {job_id}, song ID: {song_id}")
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        message['delivery_tag'] = method.delivery_tag
+        handle_message(message, ch, audio_loader, separator, default_gcs_utils)
     except Exception as e:
         # TODO: Notify event tracker about failure
         print("Unexpected error:", e)
         traceback.print_exc()
         notify_event_tracker(ch, "Failed", error_message=f"Malformed message received: {body}, error: {e}")
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-
 
 def start_worker():
     # TODO: Add a health check endpoint implementation.
@@ -180,7 +184,6 @@ def start_worker():
 
     print("Worker listening on queue: " + SPLIT_QUEUE_NAME)
     channel.start_consuming()
-
 
 if __name__ == "__main__":
     start_worker()
