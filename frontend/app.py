@@ -605,7 +605,7 @@ def song_page(song_id):
     # Fetch similar songs
     similar_songs = get_similar_songs_from_lastfm(artist, track)
 
-    audio_blob = f"songs/{song_id}/original.wav"
+    audio_blob = f"songs/{song_id}/instrumental.wav"
     song_url = generate_signed_url(BUCKET_NAME, audio_blob)
 
     # user_email = session.get("email")

@@ -277,7 +277,7 @@ def song_page(song_id):
     # Fetch similar songs
     similar_songs = get_similar_songs_from_lastfm(artist, track)
 
-    audio_blob = f"songs/{song_id}/original.wav"
+    audio_blob = f"songs/{song_id}/instrumental.wav"
     song_url = generate_signed_url(BUCKET_NAME, audio_blob)
 
     user_email = session.get("email")
@@ -439,7 +439,6 @@ def check_status(job_id):
                             body=json.dumps(history_message),
                             properties=pika.BasicProperties()
                         )
-                        connection.close()
                         print("CHANNEL PUBLISH END")
                         print(f"[check_status] Logged song view for {user_email} - {song_id}")
                     except Exception as e:
