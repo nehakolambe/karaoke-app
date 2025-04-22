@@ -34,7 +34,7 @@ resource "kubernetes_deployment" "music_splitter" {
 
         container {
           name  = "music-splitter"
-          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/music-splitter:local_final"
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/music-splitter:v1.0"
 
           port {
             container_port = 8080

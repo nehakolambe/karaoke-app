@@ -5,7 +5,7 @@
 #   make -j -f build_makefile NO_CACHE=true # Parallel build (no cache)
 
 REGISTRY=us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry
-TAG=local_final
+TAG=v1.0
 
 # Build arg
 DOCKER_CACHE := $(if $(NO_CACHE),--no-cache,)

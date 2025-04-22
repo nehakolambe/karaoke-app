@@ -24,7 +24,7 @@ resource "kubernetes_deployment" "auth" {
 
       spec {
         container {
-          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/auth-service:local_final" # Replace if using remote image or use `minikube image load`
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/auth-service:v1.0" # Replace if using remote image or use `minikube image load`
           name  = "auth-service"
 
           port {

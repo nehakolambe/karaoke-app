@@ -34,7 +34,7 @@ resource "kubernetes_deployment" "sync_lyrics" {
 
         container {
           name  = "sync-lyrics"
-          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/sync_lyrics:local_final"
+          image = "us-central1-docker.pkg.dev/bda-karaoke-app/voxoff-registry/sync_lyrics:v1.0"
 
           port {
             container_port = 8080
