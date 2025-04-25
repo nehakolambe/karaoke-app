@@ -165,7 +165,7 @@ def profile():
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect({AUTH_URL})
+    return redirect(AUTH_URL)
 
 @app.route('/error')
 def error_page():
