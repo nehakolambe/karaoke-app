@@ -38,7 +38,7 @@ resource "kubernetes_deployment" "frontend" {
           # image = "nehakolambe15/frontend:latest"
 
           port {
-            container_port = 8080
+            container_port = 5001
           }
 
           env {
