@@ -33,7 +33,7 @@ DATA_READER_URL = constants.DATA_READER_URL
 AUTH_URL = constants.AUTH_URL
 DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
-GKE_API_URL = "http://34.134.220.179:80"
+GKE_API_URL = "http://34.41.56.68:80"
 
 @app.route('/set_user')
 def set_user():

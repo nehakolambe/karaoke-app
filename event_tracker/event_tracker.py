@@ -133,11 +133,11 @@ def start_event_tracker():
     credentials = pika.PlainCredentials(constants.RABBITMQ_USER, constants.RABBITMQ_PASS)
     connection = pika.BlockingConnection(pika.ConnectionParameters(
         host=constants.RABBITMQ_HOST,
-        heartbeat=600,
-        blocked_connection_timeout=300,
+        heartbeat=180,
+        # blocked_connection_timeout=300,
         connection_attempts=3,
         retry_delay=5,
-        socket_timeout=600,
+        # socket_timeout=600,
         credentials=credentials
     ))
 

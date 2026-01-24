@@ -38,7 +38,7 @@ resource "kubernetes_deployment" "auth" {
 
           env {
             name  = "FRONTEND_URL"
-            value = "http://34.134.220.179"
+            value = "http://34.41.56.68"
           }
 
         }

@@ -115,6 +115,6 @@ resource "kubernetes_service" "frontend" {
 
     type = "LoadBalancer"
 
-    load_balancer_ip = "34.134.220.179"
+    load_balancer_ip = "34.41.56.68"
   }
 }
